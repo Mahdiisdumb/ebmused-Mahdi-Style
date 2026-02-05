@@ -4,56 +4,6 @@
 #include "ebmusv2.h"
 #include "misc.h"
 
-// JSON export/import for song data
-void export_song_json(FILE *f, struct song *s) {
-    fprintf(f, "{\n");
-    fprintf(f, "\"address\": %d,\n", s->address);
-    fprintf(f, "\"changed\": %s,\n", s->changed ? "true" : "false");
-    fprintf(f, "\"order_length\": %d,\n", s->order_length);
-    fprintf(f, "\"order\": [");
-    for (int i = 0; i < s->order_length; i++) {
-        fprintf(f, "%d", s->order[i]);
-        if (i < s->order_length - 1) fprintf(f, ",");
-    }
-    fprintf(f, "],\n");
-    fprintf(f, "\"repeat\": %d,\n", s->repeat);
-    fprintf(f, "\"repeat_pos\": %d,\n", s->repeat_pos);
-    fprintf(f, "\"patterns\": %d,\n", s->patterns);
-    fprintf(f, "\"subs\": %d\n", s->subs);
-    fprintf(f, "}\n");
-}
-
-BOOL import_song_json(FILE *f, struct song *s) {
-    // Simple JSON parser for song data
-    char line[1024];
-    while (fgets(line, sizeof(line), f)) {
-        if (strstr(line, "\"address\":")) {
-            sscanf(line, " \"address\": %d,", &s->address);
-        } else if (strstr(line, "\"changed\":")) {
-            s->changed = strstr(line, "true") != NULL;
-        } else if (strstr(line, "\"order_length\":")) {
-            sscanf(line, " \"order_length\": %d,", &s->order_length);
-        } else if (strstr(line, "\"order\":")) {
-            // Parse order array
-            s->order = malloc(sizeof(int) * s->order_length);
-            char *p = strchr(line, '[') + 1;
-            for (int i = 0; i < s->order_length; i++) {
-                sscanf(p, "%d", &s->order[i]);
-                p = strchr(p, ',') + 1;
-            }
-        } else if (strstr(line, "\"repeat\":")) {
-            sscanf(line, " \"repeat\": %d,", &s->repeat);
-        } else if (strstr(line, "\"repeat_pos\":")) {
-            sscanf(line, " \"repeat_pos\": %d,", &s->repeat_pos);
-        } else if (strstr(line, "\"patterns\":")) {
-            sscanf(line, " \"patterns\": %d,", &s->patterns);
-        } else if (strstr(line, "\"subs\":")) {
-            sscanf(line, " \"subs\": %d", &s->subs);
-        }
-    }
-    return TRUE;
-}
-
 static char errbuf[60];
 char *decomp_error;
 

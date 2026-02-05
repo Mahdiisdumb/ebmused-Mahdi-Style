@@ -3,35 +3,6 @@
 #include "ebmusv2.h"
 #include "misc.h"
 
-// JSON export/import for range data
-void export_ranges_json(FILE *f) {
-    fprintf(f, "{\n");
-    fprintf(f, "\"area_count\": %d,\n", area_count);
-    fprintf(f, "\"areas\": [\n");
-    for (int i = 0; i < area_count; i++) {
-        fprintf(f, "{\"address\": %d, \"pack\": %d}", areas[i].address, areas[i].pack);
-        if (i < area_count - 1) fprintf(f, ",");
-        fprintf(f, "\n");
-    }
-    fprintf(f, "]\n}\n");
-}
-
-BOOL import_ranges_json(FILE *f) {
-    char line[1024];
-    while (fgets(line, sizeof(line), f)) {
-        if (strstr(line, "\"area_count\":")) {
-            sscanf(line, " \"area_count\": %d,", &area_count);
-            areas = realloc(areas, sizeof(struct area) * area_count);
-        } else if (strstr(line, "\"areas\":")) {
-            for (int i = 0; i < area_count; i++) {
-                fgets(line, sizeof(line), f);
-                sscanf(line, " {\"address\": %d, \"pack\": %d}", &areas[i].address, &areas[i].pack);
-            }
-        }
-    }
-    return TRUE;
-}
-
 int area_count;
 struct area *areas;
 

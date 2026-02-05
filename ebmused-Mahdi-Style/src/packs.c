@@ -4,43 +4,6 @@
 #include "ebmusv2.h"
 #include "misc.h"
 
-// JSON export/import for pack data
-void export_pack_json(FILE *f, struct pack *p, int pack_num) {
-    fprintf(f, "{\n");
-    fprintf(f, "\"pack_num\": %d,\n", pack_num);
-    fprintf(f, "\"start_address\": %d,\n", p->start_address);
-    fprintf(f, "\"status\": %d,\n", p->status);
-    fprintf(f, "\"block_count\": %d,\n", p->block_count);
-    fprintf(f, "\"blocks\": [\n");
-    for (int i = 0; i < p->block_count; i++) {
-        fprintf(f, "{\"size\": %d, \"spc_address\": %d}", p->blocks[i].size, p->blocks[i].spc_address);
-        if (i < p->block_count - 1) fprintf(f, ",");
-        fprintf(f, "\n");
-    }
-    fprintf(f, "]\n}\n");
-}
-
-BOOL import_pack_json(FILE *f, struct pack *p) {
-    char line[1024];
-    while (fgets(line, sizeof(line), f)) {
-        if (strstr(line, "\"start_address\":")) {
-            sscanf(line, " \"start_address\": %d,", &p->start_address);
-        } else if (strstr(line, "\"status\":")) {
-            sscanf(line, " \"status\": %d,", &p->status);
-        } else if (strstr(line, "\"block_count\":")) {
-            sscanf(line, " \"block_count\": %d,", &p->block_count);
-        } else if (strstr(line, "\"blocks\":")) {
-            // Parse blocks array
-            p->blocks = malloc(sizeof(struct block) * p->block_count);
-            for (int i = 0; i < p->block_count; i++) {
-                fgets(line, sizeof(line), f);
-                sscanf(line, " {\"size\": %d, \"spc_address\": %d}", &p->blocks[i].size, &p->blocks[i].spc_address);
-            }
-        }
-    }
-    return TRUE;
-}
-
 const DWORD pack_orig_crc[] = {
 	0x35994B97, 0xDB04D065, 0xC13D8165, 0xEEFF028E, 0x5330392D, 0x705AEBBC,
 	0x4ED3BBAB, 0xFF11F6A1, 0x9E69B6C1, 0xBF0F580B, 0x0460DAD8, 0xD3EEC6FB,

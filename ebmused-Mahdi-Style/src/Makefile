@@ -1,50 +1,43 @@
-# Makefile for Windows + MSVC
+SRCS = bgmlist.c brr.c ctrltbl.c help.c inst.c loadrom.c main.c metadata.c midi.c misc.c packlist.c packs.c parser.c play.c ranges.c resource.c song.c songed.c sound.c text.c tracker.c status.c
 
-# Compiler & Linker
-CC=cl
-LINK=link
+BUILD_DIR = ../build
+RELEASE_DIR = $(BUILD_DIR)/release
+DEBUG_DIR = $(BUILD_DIR)/debug
+OBJ_DIR = obj
+DEBUG_O_DIR = $(DEBUG_DIR)/$(OBJ_DIR)
+RELEASE_O_DIR = $(RELEASE_DIR)/$(OBJ_DIR)
 
-# Flags
-CFLAGS=/nologo /W3 /O2 /EHsc /std:c17
-DEBUGFLAGS=/nologo /W3 /Od /EHsc /std:c17 /Zi
-LDFLAGS=/nologo
+O = $(SRCS:%.c=%.o)
+RELEASE_O = $(addprefix $(RELEASE_O_DIR)/, $O)
+DEBUG_O = $(addprefix $(DEBUG_O_DIR)/, $O)
 
-# Directories
-SRC_DIR=src
-BUILD_DIR=build
-OBJ_DIR=$(BUILD_DIR)/obj
-BIN_DIR=$(BUILD_DIR)/bin
+CC = gcc -W -Wall -Werror=vla -std=gnu99 -fno-exceptions
 
-# Files
-SRCS=$(wildcard $(SRC_DIR)/*.c)
-OBJS=$(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.obj,$(SRCS))
-TARGET=$(BIN_DIR)/program.exe
+RELEASE_FLAGS = -DNDEBUG -Os
+DEBUG_FLAGS = -Og -g
+LINK_FLAGS = -lcomctl32 -lcomdlg32 -lgdi32 -lwinmm
 
-# Default target
-all: release
+release: $(RELEASE_DIR)/ebmused.exe
+debug: $(DEBUG_DIR)/ebmused.exe
 
-# Release
-release: CFLAGS=$(CFLAGS)
-release: $(TARGET)
+$(RELEASE_DIR)/ebmused.exe: $(RELEASE_O)
+	$(CC) $(RELEASE_O) -static-libgcc -mwindows -s $(LINK_FLAGS) -o $@
 
-# Debug
-debug: CFLAGS=$(DEBUGFLAGS)
-debug: $(TARGET)
+$(RELEASE_O_DIR)/%.o: %.c | $(RELEASE_O_DIR)
+	$(CC) $(RELEASE_FLAGS) -c $< -o $@
 
-# Link executable
-$(TARGET): $(OBJS)
-	@echo Linking $@
-	@if not exist $(BIN_DIR) mkdir $(BIN_DIR)
-	$(LINK) $(OBJS) /OUT:$@ $(LDFLAGS)
+$(DEBUG_DIR)/ebmused.exe: $(DEBUG_O)
+	$(CC) $(DEBUG_O) $(LINK_FLAGS) -o $@
 
-# Compile objects
-$(OBJ_DIR)/%.obj: $(SRC_DIR)/%.c
-	@echo Compiling $<
-	@if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
-	$(CC) $(CFLAGS) /c $< /Fo$@
+$(DEBUG_O_DIR)/%.o: %.c | $(DEBUG_O_DIR)
+	$(CC) $(DEBUG_FLAGS) -c $< -o $@
 
-# Clean
-clean:
-	@echo Cleaning...
-	if exist $(OBJ_DIR) rmdir /s /q $(OBJ_DIR)
-	if exist $(BIN_DIR) rmdir /s /q $(BIN_DIR)
+%/$(OBJ_DIR)/resource.o: resource.rc
+	windres $< -o $@
+
+%/$(OBJ_DIR):
+	mkdir $(subst /,\,$(BUILD_DIR))
+	mkdir $(subst /,\,$(DEBUG_DIR))
+	mkdir $(subst /,\,$(DEBUG_O_DIR))
+	mkdir $(subst /,\,$(RELEASE_DIR))
+	mkdir $(subst /,\,$(RELEASE_O_DIR))
