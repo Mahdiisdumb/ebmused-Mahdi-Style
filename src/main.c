@@ -828,7 +828,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	set_up_fonts();
 
-	hwndMain = CreateWindow("ebmused_main", "EarthBound Music Editor",
+	hwndMain = CreateWindow("ebmused_main", "EarthBound Music Editor ~ Mahdiisdumb Version",
 		WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
 		CW_USEDEFAULT, CW_USEDEFAULT, scale_x(MAIN_WINDOW_WIDTH), scale_y(MAIN_WINDOW_HEIGHT),
 		NULL, NULL, hInstance, NULL);

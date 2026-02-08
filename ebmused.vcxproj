@@ -43,8 +43,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="src\blank.spc" />
-    <None Include="src\ldscript" />
-    <None Include="src\Makefile" />
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="src\ebmused.exe.manifest" />
