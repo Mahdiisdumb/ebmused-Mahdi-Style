@@ -1,12 +1,37 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "C:\\Users\\Mahdi\\source\\repos\\ebmused-Mahdi-Style\\",
-  "Documents": [],
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{73050115-242E-4125-8547-F20E9A4F9C54}|ebmused-Mahdi-Style\\ebmused-Mahdi-Style.vcxproj|C:\\Users\\Mahdi\\source\\repos\\ebmused-Mahdi-Style\\ebmused-Mahdi-Style\\src\\Makefile||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{73050115-242E-4125-8547-F20E9A4F9C54}|ebmused-Mahdi-Style\\ebmused-Mahdi-Style.vcxproj|solutionrelative:ebmused-Mahdi-Style\\src\\Makefile||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
       "VerticalTabListWidth": 256,
-      "DocumentGroups": []
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Makefile",
+              "DocumentMoniker": "C:\\Users\\Mahdi\\source\\repos\\ebmused-Mahdi-Style\\ebmused-Mahdi-Style\\src\\Makefile",
+              "RelativeDocumentMoniker": "ebmused-Mahdi-Style\\src\\Makefile",
+              "ToolTip": "C:\\Users\\Mahdi\\source\\repos\\ebmused-Mahdi-Style\\ebmused-Mahdi-Style\\src\\Makefile",
+              "RelativeToolTip": "ebmused-Mahdi-Style\\src\\Makefile",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-02-06T02:23:40.98Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
     }
   ]
 }
