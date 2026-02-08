@@ -37,9 +37,6 @@
 #define _USE_ATTRIBUTES_FOR_SAL         0
 #define __drv_typeConst                 0
 #define IDM_MENU                        1
-#define IDA_ACCEL                       1
-#define IDD_OPTIONS                     1
-#define IDRC_SPC                        1
 #define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
 #define MINIMUM_RESERVED_MANIFEST_RESOURCE_ID 1
 #define SW_SHOWNORMAL                   1
@@ -224,7 +221,6 @@
 #define VFF_CURNEDEST                   0x0001
 #define VIFF_FORCEINSTALL               0x0001
 #define IDM_CONTEXTMENU                 2
-#define IDD_ABOUT                       2
 #define WINAPI_FAMILY_PC_APP            2
 #define ISOLATIONAWARE_MANIFEST_RESOURCE_ID 2
 #define SW_SHOWMINIMIZED                2
@@ -314,11 +310,6 @@
 #define __drv_typeBitset                2
 #define VFF_FILEINUSE                   0x0002
 #define VIFF_DONTDELETEOLD              0x0002
-#define IDS_STATUS                      3
-#define IDC_RATE                        3
-#define IDC_HOMEPAGELINK                3
-#define IDD_TRANSPOSE                   3
-#define IDC_TRANSPOSE_OFF               3
 #define WINAPI_FAMILY_PHONE_APP         3
 #define ISOLATIONAWARE_NOSTATICIMPORT_MANIFEST_RESOURCE_ID 3
 #define SW_SHOWMAXIMIZED                3
@@ -353,7 +344,6 @@
 #define SUBLANG_SPANISH_MODERN          0x03
 #define SORT_CHINESE_BOPOMOFO           0x3
 #define __drv_typeExpr                  3
-#define IDC_BUFSIZE                     4
 #define WINAPI_FAMILY_SYSTEM            4
 #define ISOLATIONPOLICY_MANIFEST_RESOURCE_ID 4
 #define SW_SHOWNOACTIVATE               4
@@ -827,7 +817,6 @@
 #define LANG_SOTHO                      0x6c
 #define VK_SUBTRACT                     0x6D
 #define LANG_BASHKIR                    0x6d
-#define ID_UNDO                         110
 #define VK_DECIMAL                      0x6E
 #define LANG_LUXEMBOURGISH              0x6e
 #define ID_CUT                          111
@@ -952,6 +941,10 @@
 #define VK_OEM_FJ_LOYA                  0x95
 #define ID_OCTAVE_1                     150
 #define VK_OEM_FJ_ROYA                  0x96
+#define ID_OCTAVE_2                     151
+#define ID_OCTAVE_3                     152
+#define ID_OCTAVE_4                     153
+#define ID_OCTAVE_5                     154
 #define ID_HELP                         160
 #define VK_LSHIFT                       0xA0
 #define WM_NCMOUSEMOVE                  0x00A0
@@ -1300,6 +1293,10 @@
 #define WM_PENWINFIRST                  0x0380
 #define WM_PENWINLAST                   0x038F
 #define WM_DDE_FIRST                    0x03E0
+#define IDC_RATE                        1000
+#define IDC_BUFSIZE                     1001
+#define IDC_HOMEPAGELINK                1002
+#define IDC_TRANSPOSE_OFF               1003
 #define CF_GDIOBJLAST                   0x03FF
 #define _WIN32_WINNT_NT4                0x0400
 #define _WIN32_IE_IE40                  0x0400
@@ -1507,6 +1504,7 @@
 #define NEWFORMATDLGWITHLINK            1591
 #define IDC_MANAGE_LINK                 1592
 #define _WIN32_IE_IE70                  0x0700
+#define IDS_STATUS                      2000
 #define _WIN32_IE_IE80                  0x0800
 #define CS_SAVEBITS                     0x0800
 #define HDS_NOSIZING                    0x0800
