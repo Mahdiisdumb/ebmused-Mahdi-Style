@@ -1,0 +1,76 @@
+File: src\brr.c
+Function: printf("malloc failed in BRR decoding (sn: %02X) → MSVC: printf
+Function: printf("realloc failed in BRR decoding (sn: %02X) → MSVC: printf
+Function: printf("Sample %02X took too many iterations to get into a cycle\n", sn) → MSVC: printf
+Wrapper detected: if calls POSIX: printf
+Wrapper detected: if calls POSIX: printf
+Wrapper detected: if calls POSIX: printf
+--------------------------------
+
+File: src\ebmusv2.h
+Function: printf(x,...) → MSVC: printf
+--------------------------------
+
+File: src\main.c
+Function: printf("Instrument table found: %#X\n", details.instrument_table_addr) → MSVC: printf
+Function: printf("Music table found: %#X\n", details.music_table_addr) → MSVC: printf
+Function: printf("Music index found: %#X\n", details.music_index) → MSVC: printf
+Function: printf("Music found: %#X\n", details.music_addr) → MSVC: printf
+Function: printf("Packing music data to $%x\n", cur_song.address) → MSVC: printf
+Function: printf("Packing instrument table to $%x\n", dstInstruments) → MSVC: printf
+Function: printf("Invalid BRR block. Instrument: %d BRR source: $%x\n", i, src_addr) → MSVC: printf
+Function: printf("Packing sample #%d: $%x size: 0x%x\n", i, dst_addr, num_brr_blocks * BRR_BLOCK_SIZE) → MSVC: printf
+Function: printf("Sample #%d is too big. (Destination: $%x, size: 0x%x) → MSVC: printf
+Function: printf("Packing sample pointer %d to $%x: %x %x\n", i, dstSamplePointers +0x4*i, dst_addr, loop_addr) → MSVC: printf
+Function: printf("Command %d not yet implemented\n", id) → MSVC: printf
+Function: printf("Unhandled exception\n") → MSVC: printf
+Wrapper detected: if calls POSIX: printf
+Wrapper detected: if calls POSIX: printf
+Wrapper detected: if calls POSIX: printf
+Wrapper detected: exfilter calls POSIX: printf
+--------------------------------
+
+File: src\metadata.c
+Function: printf("unrecognized metadata line %c\n", c) → MSVC: printf
+--------------------------------
+
+File: src\misc.c
+Function: printf("GetDC failed; filling in default values for DPI.\n") → MSVC: printf
+Function: printf("DPI values initialized: %d %d\n", dpi_x, dpi_y) → MSVC: printf
+Function: printf("ANSI_FIXED_FONT: only %d bytes written to lf!\n", err) → MSVC: printf
+Function: printf("DEFAULT_GUI_FONT: only %d bytes written to lf!\n", err) → MSVC: printf
+Function: printf("SYSTEM_FONT: only %d bytes written to lf2!\n", err) → MSVC: printf
+--------------------------------
+
+File: src\packlist.c
+Function: printf("Selected %x\n", inmem_sel) → MSVC: printf
+Function: printf("Notify %d\n", code) → MSVC: printf
+Function: printf("changing range\n") → MSVC: printf
+Function: printf("moving %d to %x\n", pack, addr) → MSVC: printf
+--------------------------------
+
+File: src\play.c
+Function: printf("ch %d: bad inst %X\n", (int) → MSVC: printf
+Function: printf("Order %d: pattern %d\n", state.ordnum, pat) → MSVC: printf
+--------------------------------
+
+File: src\song.c
+Function: printf("Can't decompile: %s\n", error) → MSVC: printf
+--------------------------------
+
+File: src\sound.c
+Function: printf("Already playing!\n") → MSVC: printf
+Function: printf("This can't happen. %d > %d\n", ipos, s->length) → MSVC: printf
+Function: printf("%lu / %lu", mmt.u.cb + cnt, curbuf->dwBufferLength) → MSVC: printf
+Wrapper detected: if calls POSIX: printf
+--------------------------------
+
+File: src\status.c
+Function: vsnprintf(0, 0, format, args) → MSVC: _vsnprintf
+--------------------------------
+
+File: src\tracker.c
+Function: printf("t = %p\n", t) → MSVC: printf
+Function: printf("cursor_pos = %d\n", cursor_pos) → MSVC: printf
+--------------------------------
+
