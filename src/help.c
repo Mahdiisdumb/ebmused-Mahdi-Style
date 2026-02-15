@@ -123,8 +123,18 @@ const char help_text[] = {
 
 LRESULT CALLBACK CodeListWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch (uMsg) {
-		case WM_CTLCOLORSTATIC:
-			return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+        case WM_CTLCOLORSTATIC: {
+            // Use darker background for dark mode if enabled
+            extern BOOL dark_mode;
+            HDC hdc = (HDC)wParam;
+            HWND ctrl = (HWND)lParam;
+            if (dark_mode && ctrl == GetDlgItem(hWnd, IDC_HELPTEXT)) {
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, RGB(255,255,255));
+                return (LRESULT)GetStockObject(BLACK_BRUSH);
+            }
+            return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+        }
 		case WM_CREATE: {
 			HWND ed = CreateWindow("Edit", help_text,
 				WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY,

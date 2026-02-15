@@ -8,6 +8,8 @@
 #define ID_IMPORT_SPC 104
 #define ID_EXPORT 105
 #define ID_EXPORT_SPC 106
+#define ID_EXPORT_SPC_JSON 108
+#define ID_IMPORT_SPC_JSON 109
 #define ID_EXIT 107
 #define ID_UNDO 110
 #define ID_CUT 111
@@ -38,17 +40,13 @@
 #define ID_OCTAVE_1 150
 #define ID_HELP 160
 #define ID_ABOUT 161
-
 #define IDA_ACCEL 1
-
 #define IDD_OPTIONS 1
 #define IDC_RATE 3
 #define IDC_BUFSIZE 4
-
+#define ID_DARK_MODE 6
 #define IDD_ABOUT 2
 #define IDC_HOMEPAGELINK 3
-
 #define IDD_TRANSPOSE 3
 #define IDC_TRANSPOSE_OFF 3
-
 #define IDRC_SPC 1

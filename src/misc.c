@@ -29,14 +29,20 @@ static HFONT hOrderFont;
 
 void set_up_hdc(HDC hdc) {
 	oldfont = SelectObject(hdc, default_font());
-	oldtxt = SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
-	oldbk = SetBkColor(hdc, GetSysColor(COLOR_3DFACE));
+    extern BOOL dark_mode;
+    if (dark_mode) {
+        oldtxt = SetTextColor(hdc, RGB(255,255,255));
+        oldbk = SetBkColor(hdc, RGB(0,0,0));
+    } else {
+        oldtxt = SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+        oldbk = SetBkColor(hdc, GetSysColor(COLOR_3DFACE));
+    }
 }
 
 void reset_hdc(HDC hdc) {
 	SelectObject(hdc, oldfont);
-	SetTextColor(hdc, oldtxt);
-	SetBkColor(hdc, oldbk);
+    SetTextColor(hdc, oldtxt);
+    SetBkColor(hdc, oldbk);
 }
 
 int fgetw(FILE *f) {

@@ -45,6 +45,7 @@ HWND hwndMain;
 HWND hwndStatus;
 HMENU hmenu, hcontextmenu;
 HWND tab_hwnd[NUM_TABS];
+BOOL dark_mode = FALSE;
 
 static const int INST_TAB = 1;
 static int current_tab;
@@ -85,6 +86,242 @@ char *open_dialog(BOOL (WINAPI *func)(LPOPENFILENAME),
 	ofn.nMaxFile = MAX_PATH;
 	ofn.Flags = flags | OFN_NOCHANGEDIR;
 	return func(&ofn) ? filename : NULL;
+}
+static void write_hex_array(FILE *f, const BYTE *data, int len) {
+    fputs("[", f);
+    for (int i = 0; i < len; i++) {
+        if (i) fputs(",", f);
+        fprintf(f, "0x%02X", data[i]);
+    }
+    fputs("]", f);
+}
+
+static void write_spc_json(FILE *f) {
+    fprintf(f, "{\n");
+    fprintf(f, "  \"music_addr\": %u,\n", cur_song.address);
+    fprintf(f, "  \"order_length\": %d,\n", cur_song.order_length);
+
+    fprintf(f, "  \"order\": [");
+    for (int i = 0; i < cur_song.order_length; i++) {
+        if (i) fputs(", ", f);
+        fprintf(f, "%d", cur_song.order[i]);
+    }
+    fputs("],\n", f);
+
+    fprintf(f, "  \"patterns\": {\n");
+    for (int p = 0; p < cur_song.patterns; p++) {
+        fprintf(f, "    \"%d\": [\n", p);
+        for (int ch = 0; ch < 8; ch++) {
+            struct track *t = &cur_song.pattern[p][ch];
+            fprintf(f, "      ");
+            if (!t->track) {
+                fputs("null", f);
+            } else {
+                write_hex_array(f, t->track, t->size + 1);
+            }
+            fprintf(f, "%s\n", ch < 7 ? "," : "");
+        }
+        fprintf(f, "    ]%s\n", p < cur_song.patterns - 1 ? "," : "");
+    }
+    fputs("  },\n", f);
+
+    fprintf(f, "  \"subs\": [\n");
+    for (int s = 0; s < cur_song.subs; s++) {
+        struct track *t = &cur_song.sub[s];
+        fprintf(f, "    ");
+        if (!t->track) fputs("null", f);
+        else write_hex_array(f, t->track, t->size + 1);
+        fprintf(f, "%s\n", s < cur_song.subs - 1 ? "," : "");
+    }
+    fputs("  ]\n", f);
+
+    extern int inst_base;
+    extern WORD sample_ptr_base;
+    fprintf(f, ",\n  \"inst_base\": %d,\n  \"sample_ptr_base\": %u\n", inst_base, sample_ptr_base);
+
+    fputs("}\n", f);
+}
+static BOOL parse_hex_array(const char *s, BYTE **out, int *outlen) {
+    // s points at '['
+    const char *p = s;
+    if (*p != '[') return FALSE;
+    p++;
+    BYTE *buf = NULL;
+    int cap = 0, len = 0;
+    while (*p && *p != ']') {
+        while (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t' || *p == ',') p++;
+        if (strncmp(p, "0x", 2) == 0) {
+            unsigned int val;
+            if (sscanf(p, "0x%2X", &val) == 1) {
+                if (len >= cap) { cap = cap ? cap*2 : 16; buf = realloc(buf, cap); }
+                buf[len++] = (BYTE)val;
+            }
+            // advance past hex value
+            while (*p && *p != ',' && *p != ']') p++;
+        } else {
+            // unknown token, skip
+            while (*p && *p != ',' && *p != ']') p++;
+        }
+    }
+    if (out) *out = buf;
+    if (outlen) *outlen = len;
+    return TRUE;
+}
+
+static void import_spc_json() {
+    char *file = open_dialog(GetOpenFileName,
+        "SPC JSON files (*.json)\0*.json\0All Files\0*.*\0",
+        NULL,
+        OFN_FILEMUSTEXIST | OFN_HIDEREADONLY);
+    if (!file) return;
+
+    FILE *f = fopen(file, "rb");
+    if (!f) { MessageBox2(strerror(errno), "Import SPC JSON", MB_ICONEXCLAMATION); return; }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *buf = malloc(sz + 1);
+    fread(buf, 1, sz, f);
+    buf[sz] = '\0';
+    fclose(f);
+
+    // naive parsing
+    // parse order_length
+    int order_length = 0;
+    const char *p = strstr(buf, "\"order_length\"");
+    if (p) sscanf(p, "\"order_length\"%*[^0-9]%d", &order_length);
+
+    // parse order array
+    int *order = NULL;
+    if (order_length > 0) {
+        order = malloc(sizeof(int) * order_length);
+        p = strstr(buf, "\"order\"");
+        if (p) {
+            const char *q = strchr(p, '[');
+            if (q) {
+                q++;
+                for (int i = 0; i < order_length; i++) {
+                    while (*q && (*q==' '||*q==','||*q=='\n' || *q=='\r' || *q=='\t')) q++;
+                    int v = 0;
+                    if (sscanf(q, "%d", &v) == 1) order[i] = v;
+                    // advance to next comma
+                    while (*q && *q != ',' && *q != ']') q++;
+                }
+            }
+        }
+    }
+
+    // find patterns by scanning numeric keys
+    int max_pattern = -1;
+    p = buf;
+    while ((p = strstr(p, "\"")) != NULL) {
+        int id;
+        if (sscanf(p+1, "%d\"", &id) == 1) {
+            if (id > max_pattern) max_pattern = id;
+        }
+        p++;
+    }
+    int patterns = max_pattern + 1;
+    if (patterns < 0) patterns = 0;
+
+    // allocate cur_song
+    free_song(&cur_song);
+    cur_song.order_length = order_length;
+    cur_song.order = order;
+    cur_song.patterns = patterns;
+    if (patterns > 0) {
+        cur_song.pattern = malloc(patterns * sizeof *cur_song.pattern);
+        // initialize
+        for (int i = 0; i < patterns; i++) for (int ch = 0; ch < 8; ch++) { cur_song.pattern[i][ch].track = NULL; cur_song.pattern[i][ch].size = 0; }
+    } else cur_song.pattern = NULL;
+
+    // parse patterns content
+    for (int pid = 0; pid < patterns; pid++) {
+        char key[32]; sprintf(key, "\"%d\"", pid);
+        p = strstr(buf, key);
+        if (!p) continue;
+        // find opening '[' for pattern array
+        const char *arr = strchr(p, '[');
+        if (!arr) continue;
+        // position at first element inside outer array
+        const char *chp = arr + 1;
+        for (int ch = 0; ch < 8; ch++) {
+            while (*chp && (*chp==' '||*chp=='\n' || *chp=='\r' || *chp=='\t' || *chp==',')) chp++;
+            if (strncmp(chp, "null", 4) == 0) {
+                cur_song.pattern[pid][ch].track = NULL;
+                cur_song.pattern[pid][ch].size = 0;
+                chp += 4;
+            } else if (*chp == '[') {
+                BYTE *data = NULL; int len = 0;
+                parse_hex_array(chp, &data, &len);
+                if (len > 0) {
+                    // ensure trailing zero
+                    if (data[len-1] != 0) {
+                        data = realloc(data, len+1);
+                        data[len] = 0; len++;
+                    }
+                    cur_song.pattern[pid][ch].track = malloc(len);
+                    memcpy(cur_song.pattern[pid][ch].track, data, len);
+                    cur_song.pattern[pid][ch].size = len - 1;
+                } else {
+                    cur_song.pattern[pid][ch].track = NULL;
+                    cur_song.pattern[pid][ch].size = 0;
+                }
+                free(data);
+                // advance to closing ']' of this inner array
+                const char *end = strchr(chp, ']'); if (end) chp = end+1; else chp += 1;
+            } else {
+                // unexpected token, mark as empty
+                cur_song.pattern[pid][ch].track = NULL;
+                cur_song.pattern[pid][ch].size = 0;
+            }
+        }
+    }
+
+    // parse subs array
+    p = strstr(buf, "\"subs\"");
+    if (p) {
+        const char *subs_arr = strchr(p, '[');
+        if (subs_arr) {
+            const char *q = subs_arr + 1;
+            int subcount = 0;
+            // count subs by counting top-level '[' occurrences
+            while ((q = strchr(q, '[')) != NULL) { subcount++; q++; }
+            // better approach: find the number of top-level arrays by scanning
+            // For simplicity, try to parse sequentially
+            // Reset to first
+            q = subs_arr + 1;
+            // approximate: parse until closing ']' of subs_arr
+            // We'll collect subs into a dynamic array
+            struct track *subs = NULL; int subs_sz = 0;
+            while (*q && *q != ']') {
+                while (*q && (*q==' '||*q=='\n' || *q=='\r' || *q=='\t' || *q==',')) q++;
+                if (*q == '[') {
+                    BYTE *data = NULL; int len = 0;
+                    parse_hex_array(q, &data, &len);
+                    struct track t = {0,NULL};
+                    if (len > 0) {
+                        if (data[len-1] != 0) { data = realloc(data, len+1); data[len]=0; len++; }
+                        t.track = malloc(len); memcpy(t.track, data, len); t.size = len-1;
+                    }
+                    subs = realloc(subs, (subs_sz+1)*sizeof *subs);
+                    subs[subs_sz++] = t;
+                    free(data);
+                    const char *end = strchr(q, ']'); if (!end) break; q = end+1;
+                } else if (strncmp(q, "null", 4) == 0) {
+                    struct track t = {0,NULL}; subs = realloc(subs, (subs_sz+1)*sizeof *subs); subs[subs_sz++] = t; q += 4;
+                } else break;
+            }
+            cur_song.subs = subs_sz;
+            cur_song.sub = subs;
+        }
+    }
+
+    free(buf);
+
+    cur_song.changed = TRUE;
+    save_cur_song_to_pack();
+    SendMessage(tab_hwnd[current_tab], WM_SONG_IMPORTED, 0, 0);
 }
 
 BOOL get_original_rom() {
@@ -639,7 +876,21 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			break;
 		case ID_IMPORT: import(); break;
 		case ID_IMPORT_SPC: import_spc(); break;
+		case ID_IMPORT_SPC_JSON: import_spc_json(); break;
 		case ID_EXPORT: export(); break;
+        case ID_EXPORT_SPC_JSON: {
+            if (cur_song.order_length > 0) {
+                char *file = open_dialog(GetSaveFileName, "SPC JSON files (*.json)\0*.json\0", "json", OFN_OVERWRITEPROMPT);
+                if (file) {
+                    FILE *f = fopen(file, "wb");
+                    if (f) { write_spc_json(f); fclose(f); }
+                    else MessageBox2(strerror(errno), "Export SPC JSON", MB_ICONEXCLAMATION);
+                }
+            } else {
+                MessageBox2("No song loaded", "Export SPC JSON", MB_ICONEXCLAMATION);
+            }
+            break;
+        }
 		case ID_EXPORT_SPC: export_spc(); break;
 		case ID_EXIT: DestroyWindow(hWnd); break;
 		case ID_OPTIONS: {
@@ -649,6 +900,17 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				// Re-enable playback for the instruments tab...
 				start_playing();
 			}
+			break;
+		}
+		case ID_DARK_MODE: {
+			dark_mode = !dark_mode;
+			CheckMenuItem(hmenu, ID_DARK_MODE, dark_mode ? MF_CHECKED : MF_UNCHECKED);
+			// Apply dark mode colors globally by changing the main window background brush
+			HBRUSH bg = (HBRUSH)(dark_mode ? GetStockObject(BLACK_BRUSH) : (HBRUSH)(COLOR_3DFACE + 1));
+			SetClassLongPtr(hwndMain, GCLP_HBRBACKGROUND, (LONG_PTR)bg);
+			// Force a full redraw of the window and its children
+			RedrawWindow(hwndMain, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+			for (int i = 0; i < NUM_TABS; i++) if (tab_hwnd[i]) InvalidateRect(tab_hwnd[i], NULL, TRUE);
 			break;
 		}
 		case ID_CUT:
@@ -752,6 +1014,18 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			tab_selected(TabCtrl_GetCurSel(pnmh->hwndFrom));
 		break;
 	}
+	case WM_CTLCOLORSTATIC: {
+		// If dark mode is enabled, change static control colors
+		HDC hdc = (HDC)wParam;
+		HWND ctrl = (HWND)lParam;
+		extern BOOL dark_mode;
+		if (dark_mode) {
+			SetTextColor(hdc, RGB(255,255,255));
+			SetBkColor(hdc, RGB(0,0,0));
+			return (LRESULT)GetStockObject(BLACK_BRUSH);
+		}
+		break;
+	}
 	case WM_CLOSE:
 		if (!close_rom()) break;
 		DestroyWindow(hWnd);
@@ -836,6 +1110,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	ShowWindow(hwndMain, nCmdShow);
 
 	hmenu = GetMenu(hwndMain);
+	CheckMenuItem(hmenu, ID_DARK_MODE, dark_mode ? MF_CHECKED : MF_UNCHECKED);
 	CheckMenuRadioItem(hmenu, ID_OCTAVE_1, ID_OCTAVE_1+4, ID_OCTAVE_1+2, MF_BYCOMMAND);
 
 	hcontextmenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDM_CONTEXTMENU));

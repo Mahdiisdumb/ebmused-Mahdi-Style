@@ -38,8 +38,10 @@ extern int selected_bgm;
 extern struct song cur_song;
 extern struct song_state pattop_state, state;
 extern HINSTANCE hinstance;
+extern BOOL dark_mode;
 extern HWND hwndMain;
 extern HWND hwndStatus;
+extern BOOL dark_mode;
 #ifdef CreateWindow
 extern HMENU hmenu, hcontextmenu;
 #endif
