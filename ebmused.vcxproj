@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="libs\cJSON.c" />
+    <ClCompile Include="libs\cJSON_Utils.c" />
     <ClCompile Include="src\bgmlist.c" />
     <ClCompile Include="src\brr.c" />
     <ClCompile Include="src\ctrltbl.c" />
@@ -48,6 +50,7 @@
     <Manifest Include="src\ebmused.exe.manifest" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="libs\cJSON.h" />
     <ClInclude Include="src\ebmusv2.h" />
     <ClInclude Include="src\id.h" />
     <ClInclude Include="src\misc.h" />

@@ -2,6 +2,7 @@
 #define MISC_H
 
 #define WIN32_LEAN_AND_MEAN
+#include "../libs/cJSON.h"
 #include <windows.h>
 #include <commdlg.h>
 
