@@ -1,0 +1,27 @@
+:{$PORT}
+
+root * .
+file_server
+encode gzip zstd
+
+@wasm_files { path *.wasm }
+header @wasm_files Content-Type application/wasm
+
+@data_files { path *.data *.mem *.symbols.json }
+header @data_files Content-Type application/octet-stream
+
+header {
+    Content-Security-Policy "default-src 'self'; \
+img-src 'self' data: https: *; \
+style-src 'self' 'unsafe-inline' https: *; \
+script-src 'self' 'unsafe-inline' 'unsafe-eval' https: * blob:; \
+connect-src 'self' https: * blob:; \
+media-src 'self' https: * blob:; \
+font-src 'self' data: https: *; \
+object-src 'none'; \
+frame-src 'self' https: * blob:;"
+    Cross-Origin-Opener-Policy "same-origin"
+    Cross-Origin-Embedder-Policy "require-corp"
+    Referrer-Policy "no-referrer"
+    X-Content-Type-Options "nosniff"
+}
