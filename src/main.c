@@ -186,6 +186,58 @@ static cJSON* make_byte_array(const BYTE* data, int len) {
 	return arr;
 }
 
+// --- Base64 helpers (small, self-contained) --------------------------------
+static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static char* base64_encode(const unsigned char* data, size_t in_len) {
+	size_t out_len = 4 * ((in_len + 2) / 3);
+	char* out = malloc(out_len + 1);
+	if (!out) return NULL;
+	char* p = out;
+	for (size_t i = 0; i < in_len; i += 3) {
+		int v = data[i] << 16;
+		int rem = in_len - i;
+		if (rem > 1) v |= data[i+1] << 8;
+		if (rem > 2) v |= data[i+2];
+		*p++ = b64_table[(v >> 18) & 0x3F];
+		*p++ = b64_table[(v >> 12) & 0x3F];
+		*p++ = (rem > 1) ? b64_table[(v >> 6) & 0x3F] : '=';
+		*p++ = (rem > 2) ? b64_table[v & 0x3F] : '=';
+	}
+	*p = '\0';
+	return out;
+}
+
+static unsigned char* base64_decode(const char* src, size_t* out_len) {
+	if (!src) return NULL;
+	size_t len = strlen(src);
+	if (len % 4 != 0) return NULL;
+	size_t pads = 0;
+	if (len) {
+		if (src[len-1] == '=') pads++;
+		if (src[len-2] == '=') pads++;
+	}
+	size_t outsize = (len / 4) * 3 - pads;
+	unsigned char* out = malloc(outsize + 1);
+	if (!out) return NULL;
+	unsigned char* p = out;
+	for (size_t i = 0; i < len; i += 4) {
+		int vals[4];
+		for (int j = 0; j < 4; j++) {
+			char c = src[i+j];
+			if (c == '=') { vals[j] = 0; continue; }
+			const char* pos = strchr(b64_table, c);
+			vals[j] = pos ? (int)(pos - b64_table) : 0;
+		}
+		int v = (vals[0] << 18) | (vals[1] << 12) | (vals[2] << 6) | vals[3];
+		*p++ = (v >> 16) & 0xFF;
+		if (src[i+2] != '=') *p++ = (v >> 8) & 0xFF;
+		if (src[i+3] != '=') *p++ = v & 0xFF;
+	}
+	if (out_len) *out_len = outsize;
+	out[outsize] = 0;
+	return out;
+}
+
 static void write_spc_json(FILE* f) {
 	extern int inst_base;
 	extern WORD sample_ptr_base;
@@ -221,19 +273,32 @@ static void write_spc_json(FILE* f) {
 
 	// Subs
 	cJSON* subs_arr = cJSON_CreateArray();
-	for (int s = 0; s < cur_song.subs; s++) {
+    for (int s = 0; s < cur_song.subs; s++) {
 		struct track* t = &cur_song.sub[s];
 		if (!t->track) {
 			cJSON_AddItemToArray(subs_arr, cJSON_CreateNull());
-		}
-		else {
-			cJSON_AddItemToArray(subs_arr, make_byte_array(t->track, t->size + 1));
+		} else {
+			// embed subroutine bytes as base64 in a single string to preserve exact SPC sample/block data
+			char* b64 = base64_encode(t->track, t->size + 1);
+			if (b64) {
+				cJSON_AddItemToArray(subs_arr, cJSON_CreateString(b64));
+				free(b64);
+			} else {
+				cJSON_AddItemToArray(subs_arr, cJSON_CreateNull());
+			}
 		}
 	}
 	cJSON_AddItemToObject(root, "subs", subs_arr);
 
 	cJSON_AddNumberToObject(root, "inst_base", inst_base);
 	cJSON_AddNumberToObject(root, "sample_ptr_base", sample_ptr_base);
+
+	// Embed entire SPC image as base64 so imports can restore samples exactly
+	char* spc_b64 = base64_encode(spc, 0x10000);
+	if (spc_b64) {
+		cJSON_AddStringToObject(root, "spc", spc_b64);
+		free(spc_b64);
+	}
 
 	char* json_str = cJSON_Print(root);
 	if (json_str) {
@@ -292,6 +357,24 @@ static void import_spc_json_from_file(const char* path) {
 
 	item = cJSON_GetObjectItem(root, "sample_ptr_base");
 	if (item && cJSON_IsNumber(item)) sample_ptr_base = (WORD)item->valueint;
+
+	// If the JSON embeds a full SPC image (base64), decode it and populate the internal SPC buffer
+	cJSON* spc_item = cJSON_GetObjectItem(root, "spc");
+	if (spc_item && cJSON_IsString(spc_item)) {
+		size_t spc_len = 0;
+		unsigned char* decoded_spc = base64_decode(spc_item->valuestring, &spc_len);
+		if (decoded_spc && spc_len > 0) {
+			// Copy decoded data into the working SPC buffer; pad with zeros if shorter
+			size_t copy_len = spc_len > 0x10000 ? 0x10000 : spc_len;
+			memcpy(spc, decoded_spc, copy_len);
+			if (copy_len < 0x10000) memset(&spc[copy_len], 0, 0x10000 - copy_len);
+			free(decoded_spc);
+
+			// Rebuild samples from the provided SPC image
+			free_samples();
+			decode_samples(&spc[sample_ptr_base]);
+		}
+	}
 
 	// ── Read order array ──────────────────────────────────────────────────────
 	cJSON* order_arr = cJSON_GetObjectItem(root, "order");
@@ -355,7 +438,7 @@ static void import_spc_json_from_file(const char* path) {
 		}
 	}
 
-	// Subs
+    // Subs
 	cur_song.subs = sub_count;
 	for (int s = 0; s < sub_count; s++) {
 		struct track* t = &cur_song.sub[s];
@@ -364,6 +447,19 @@ static void import_spc_json_from_file(const char* path) {
 
 		cJSON* sub_item = cJSON_GetArrayItem(subs_arr, s);
 		if (!sub_item || cJSON_IsNull(sub_item)) continue;
+
+		// Support new format: base64-encoded string containing the bytes
+		if (cJSON_IsString(sub_item)) {
+			size_t outlen = 0;
+			unsigned char* decoded = base64_decode(sub_item->valuestring, &outlen);
+			if (decoded && outlen > 0) {
+				t->track = (BYTE*)decoded; // take ownership of the malloc'd buffer
+				t->size = (int)outlen - 1;
+			}
+			continue;
+		}
+
+		// Legacy format: array of numbers
 		if (!cJSON_IsArray(sub_item)) continue;
 
 		int len = cJSON_GetArraySize(sub_item);
