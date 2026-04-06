@@ -1,6 +1,3 @@
-// The original MinGW project uses a different name for this symbol for some reason.
-// Feature check macros from the MinGW-w64 wiki:
-// https://sourceforge.net/p/mingw-w64/wiki2/Answer%20Check%20For%20Mingw-w64/
 #ifdef __MINGW32__
 #include <_mingw.h>
 #endif
