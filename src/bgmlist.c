@@ -165,6 +165,19 @@ static void song_search() {
 }
 
 LRESULT CALLBACK BGMListWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // Forward WM_CTLCOLOR* to main dark mode handler
+	switch (uMsg) {
+	case WM_CTLCOLORSTATIC:
+	case WM_CTLCOLOREDIT:
+	case WM_CTLCOLORLISTBOX:
+	case WM_CTLCOLORBTN:
+	case WM_CTLCOLORDLG:
+	case WM_CTLCOLORSCROLLBAR: {
+		LRESULT res = handle_dark_ctlcolor(uMsg, wParam, lParam);
+		if (res) return res;
+		break;
+	}
+	}
 	char buf[MAX_TITLE_LEN+5];
 	switch (uMsg) {
 	case WM_CREATE:

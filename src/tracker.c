@@ -95,8 +95,24 @@ static void scroll_to(int new_pos) {
 }
 
 static COLORREF get_bkcolor(int sub_loops) {
+    // Use darker palette in dark mode
+    extern BOOL dark_mode;
+	// Import dark mode color constants
+	#ifndef DM_BG
+	#define DM_BG RGB(32,32,32)
+	#define DM_BG2 RGB(45,45,45)
+	#define DM_FG RGB(220,220,220)
+	#endif
 	if (sub_loops == 0)
-		return 0xFFFFFF;
+		return dark_mode ? RGB(45,45,45) : 0xFFFFFF;
+	if (dark_mode) {
+		int r = 64, g = 64, b = 64;
+		if (sub_loops & 1) r = min(r + 40, 255);
+		if (sub_loops & 2) g = min(g + 40, 255);
+		if (sub_loops & 4) b = min(b + 40, 255);
+		if (sub_loops & 8) { r = max(r - 10, 0); g = max(g - 10, 0); b = max(b - 10, 0); }
+		return RGB(r, g, b);
+	}
 	int c = 0x808080;
 	if (sub_loops & 1) c += 0x550000;
 	if (sub_loops & 2) c += 0x005500;
@@ -335,6 +351,19 @@ static void show_repeat() {
 }
 
 LRESULT CALLBACK EditorWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // Forward WM_CTLCOLOR* to main dark mode handler
+	switch (uMsg) {
+	case WM_CTLCOLORSTATIC:
+	case WM_CTLCOLOREDIT:
+	case WM_CTLCOLORLISTBOX:
+	case WM_CTLCOLORBTN:
+	case WM_CTLCOLORDLG:
+	case WM_CTLCOLORSCROLLBAR: {
+		LRESULT res = handle_dark_ctlcolor(uMsg, wParam, lParam);
+		if (res) return res;
+		break;
+	}
+	}
 	static const BYTE editor_menu_cmds[] = {
 		ID_CUT, ID_COPY, ID_PASTE, ID_DELETE,
 		ID_SPLIT_PATTERN, ID_JOIN_PATTERNS,
@@ -520,14 +549,26 @@ static void tracker_paint(HWND hWnd) {
 	RECT rc;
 	char codes[8];
 	int length;
+    // Apply dark-friendly HDC settings when in dark mode
+	extern BOOL dark_mode;
+	if (dark_mode) {
+		SetTextColor(hdc, DM_FG);
+		SetBkMode(hdc, TRANSPARENT);
+	}
 	set_up_hdc(hdc);
 
-	if (cur_song.order_length == 0) {
+    if (cur_song.order_length == 0) {
 		static const char str[] = "No song is currently loaded.";
 		GetClientRect(hWnd, &rc);
 		SetTextAlign(hdc, TA_CENTER);
 		int x = (rc.left + rc.right) >> 1;
 		int y = (rc.top + rc.bottom - font_height) >> 1;
+        if (dark_mode) {
+			HBRUSH bg = CreateSolidBrush(DM_BG);
+			FillRect(hdc, &rc, bg);
+			DeleteObject(bg);
+			SetTextColor(hdc, DM_FG);
+		}
 		ExtTextOut(hdc, x, y, ETO_OPAQUE, &rc, str, sizeof(str) - 1, NULL);
 		if (get_cur_block() != NULL && decomp_error) {
 			y += font_height;
@@ -537,9 +578,8 @@ static void tracker_paint(HWND hWnd) {
 		}
 		goto paint_end;
 	}
-
-	SetTextColor(hdc, 0xFFFFFF);
-	SetBkColor(hdc, 0x808080);
+	SetTextColor(hdc, dark_mode ? DM_FG : 0xFFFFFF);
+	SetBkColor(hdc, dark_mode ? DM_BG2 : 0x808080);
 	rc.left = 0;
 	rc.right = pos_width;
 	int pos = state.patpos;

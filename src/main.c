@@ -97,8 +97,91 @@ static void rebuild_dark_brushes(void) {
 		hbrDarkBg = CreateSolidBrush(DM_BG);
 		hbrDarkBg2 = CreateSolidBrush(DM_BG2);
 		hbrDarkEdit = CreateSolidBrush(DM_BG2);
+       }
+}
+
+// Set or clear a background brush on a menu and its submenus (recursive).
+static void set_menu_background(HMENU menu, BOOL enable) {
+	if (!menu) return;
+	MENUINFO mi;
+	memset(&mi, 0, sizeof(mi));
+	mi.cbSize = sizeof(mi);
+	mi.fMask = MIM_BACKGROUND;
+	mi.hbrBack = enable ? (hbrDarkBg ? hbrDarkBg : CreateSolidBrush(DM_BG)) : NULL;
+	SetMenuInfo(menu, &mi);
+
+	int count = GetMenuItemCount(menu);
+	for (int i = 0; i < count; i++) {
+		HMENU sub = GetSubMenu(menu, i);
+		if (sub) set_menu_background(sub, enable);
+	}
+   }
+
+// Search a menu (and its submenus) for an item with command id `id` and copy its text into out
+static BOOL find_menu_string(HMENU menu, UINT id, char* out, int outlen) {
+	if (!menu) return FALSE;
+	int cnt = GetMenuItemCount(menu);
+	for (int i = 0; i < cnt; i++) {
+		UINT mid = GetMenuItemID(menu, i);
+		if ((UINT)-1 == mid) {
+			HMENU sub = GetSubMenu(menu, i);
+			if (sub && find_menu_string(sub, id, out, outlen)) return TRUE;
+		} else if (mid == id) {
+			if (GetMenuStringA(menu, i, out, outlen, MF_BYPOSITION) > 0) return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+// Owner-draw menu handlers
+static BOOL handle_measure_item(MEASUREITEMSTRUCT* mis) {
+	if (!mis || mis->CtlType != ODT_MENU) return FALSE;
+	mis->itemWidth = 200;
+	mis->itemHeight = 18;
+	return TRUE;
+}
+
+// Enable or disable owner-draw on all menu items (recursive)
+static void set_menu_owner_draw(HMENU menu, BOOL enable) {
+	if (!menu) return;
+	int count = GetMenuItemCount(menu);
+	for (int i = 0; i < count; i++) {
+		// If this item has a submenu, recurse
+		HMENU sub = GetSubMenu(menu, i);
+		if (sub) set_menu_owner_draw(sub, enable);
+
+		MENUITEMINFO mii;
+		memset(&mii, 0, sizeof(mii));
+		mii.cbSize = sizeof(mii);
+		mii.fMask = MIIM_FTYPE;
+		mii.fType = enable ? MFT_OWNERDRAW : MFT_STRING;
+		// set by position
+		SetMenuItemInfo(menu, i, TRUE, &mii);
 	}
 }
+
+static BOOL handle_draw_item(DRAWITEMSTRUCT* dis) {
+	if (!dis || dis->CtlType != ODT_MENU) return FALSE;
+	HDC hdc = dis->hDC;
+	RECT rc = dis->rcItem;
+	HBRUSH fill = dark_mode && hbrDarkBg ? hbrDarkBg : GetSysColorBrush(COLOR_MENU);
+	FillRect(hdc, &rc, fill);
+	COLORREF fg = dark_mode ? DM_FG : GetSysColor(COLOR_MENUTEXT);
+	SetTextColor(hdc, fg);
+	SetBkMode(hdc, TRANSPARENT);
+    char text[256] = "";
+	// Find the menu text from the main menu or context menu
+	HMENU root = GetMenu(hwndMain);
+	BOOL got = find_menu_string(root, dis->itemID, text, sizeof(text));
+	if (!got && hcontextmenu) got = find_menu_string(hcontextmenu, dis->itemID, text, sizeof(text));
+    if (got) {
+		// For dark mode ensure context menu text uses light color
+		if (dark_mode) SetTextColor(hdc, DM_FG);
+		DrawTextA(hdc, text, -1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	}
+	return TRUE;
+}
+
 
 // Apply/remove dark title bar via DWM (Windows 10 1809+)
 static void apply_dark_titlebar(HWND hwnd, BOOL enable) {
@@ -396,18 +479,45 @@ static void import_spc_json_from_file(const char* path) {
 	int sub_count = (subs_arr && cJSON_IsArray(subs_arr)) ? cJSON_GetArraySize(subs_arr) : 0;
 
 	// ── Rebuild cur_song ──────────────────────────────────────────────────────
-	free_song(&cur_song);
+   free_song(&cur_song);
 
 	cur_song.address = music_addr;
 	cur_song.order_length = order_length;
+ // initialize repeat fields to safe defaults in case JSON lacks them
+	cur_song.repeat = 0;
+	cur_song.repeat_pos = 0;
+	// allocate order array
+	if (order_length > 0) {
+		cur_song.order = malloc(sizeof(int) * order_length);
+		if (!cur_song.order) {
+			MessageBox2("Out of memory", "Import SPC JSON", MB_ICONEXCLAMATION);
+			cJSON_Delete(root);
+			return;
+		}
+	} else {
+		cur_song.order = NULL;
+	}
 
 	for (int i = 0; i < order_length; i++) {
 		cJSON* el = cJSON_GetArrayItem(order_arr, i);
 		cur_song.order[i] = (el && cJSON_IsNumber(el)) ? (BYTE)el->valueint : 0;
 	}
 
-	// Patterns
+ // Patterns
 	cur_song.patterns = pattern_count;
+	if (pattern_count > 0) {
+		cur_song.pattern = calloc(pattern_count, sizeof(*cur_song.pattern));
+		if (!cur_song.pattern) {
+			MessageBox2("Out of memory", "Import SPC JSON", MB_ICONEXCLAMATION);
+			free(cur_song.order);
+			cur_song.order = NULL;
+			cJSON_Delete(root);
+			return;
+		}
+	} else {
+		cur_song.pattern = NULL;
+	}
+
 	for (int p = 0; p < pattern_count; p++) {
 		char key[16];
 		sprintf(key, "%d", p);
@@ -424,7 +534,7 @@ static void import_spc_json_from_file(const char* path) {
 			int len = cJSON_GetArraySize(ch_item);
 			if (len <= 0) continue;
 
-			t->track = malloc(len);
+			t->track = malloc(len + 1);
 			if (!t->track) continue; // skip on alloc failure, don't crash
 			t->size = len - 1;       // size excludes the terminating byte
 
@@ -432,11 +542,33 @@ static void import_spc_json_from_file(const char* path) {
 				cJSON* byte_item = cJSON_GetArrayItem(ch_item, b);
 				t->track[b] = (byte_item && cJSON_IsNumber(byte_item)) ? (BYTE)byte_item->valueint : 0;
 			}
+			// Ensure null terminator
+			t->track[t->size] = 0;
 		}
 	}
 
     // Subs
 	cur_song.subs = sub_count;
+	if (sub_count > 0) {
+		cur_song.sub = calloc(sub_count, sizeof(struct track));
+		if (!cur_song.sub) {
+			MessageBox2("Out of memory", "Import SPC JSON", MB_ICONEXCLAMATION);
+			// clean up previously allocated resources
+			for (int p = 0; p < cur_song.patterns; p++)
+				for (int ch = 0; ch < 8; ch++)
+					free(cur_song.pattern[p][ch].track);
+			free(cur_song.pattern);
+			free(cur_song.order);
+			cur_song.pattern = NULL;
+			cur_song.order = NULL;
+			cur_song.subs = 0;
+			cJSON_Delete(root);
+			return;
+		}
+	} else {
+		cur_song.sub = NULL;
+	}
+
 	for (int s = 0; s < sub_count; s++) {
 		struct track* t = &cur_song.sub[s];
 		t->track = NULL;
@@ -450,7 +582,14 @@ static void import_spc_json_from_file(const char* path) {
 			size_t outlen = 0;
 			unsigned char* decoded = base64_decode(sub_item->valuestring, &outlen);
 			if (decoded && outlen > 0) {
-				t->track = (BYTE*)decoded; // take ownership of the malloc'd buffer
+             // ensure decoded buffer is NUL-terminated; if not, expand and add terminator
+				if (decoded[outlen-1] != 0) {
+					unsigned char* tmp = realloc(decoded, outlen + 1);
+					if (tmp) decoded = tmp;
+					decoded[outlen] = 0;
+					outlen += 1;
+				}
+				t->track = (BYTE*)decoded; // take ownership
 				t->size = (int)outlen - 1;
 			}
 			continue;
@@ -469,6 +608,55 @@ static void import_spc_json_from_file(const char* path) {
 		for (int b = 0; b < len; b++) {
 			cJSON* byte_item = cJSON_GetArrayItem(sub_item, b);
 			t->track[b] = (byte_item && cJSON_IsNumber(byte_item)) ? (BYTE)byte_item->valueint : 0;
+		}
+	}
+
+	// Validate imported data before committing it to runtime state
+	// Check order entries reference valid patterns
+	for (int i = 0; i < cur_song.order_length; i++) {
+		if (cur_song.order[i] < 0 || cur_song.order[i] >= cur_song.patterns) {
+			MessageBox2("Imported JSON: order references invalid pattern index", "Import SPC JSON", MB_ICONEXCLAMATION);
+			free_song(&cur_song);
+			cJSON_Delete(root);
+			return;
+		}
+	}
+
+	// Validate each track's format using existing validator; abort on error
+	for (int p = 0; p < cur_song.patterns; p++) {
+		for (int ch = 0; ch < 8; ch++) {
+			struct track* t = &cur_song.pattern[p][ch];
+			if (t->track) {
+				if (!validate_track(t->track, t->size, FALSE)) {
+					// validate_track shows an error message
+					free_song(&cur_song);
+					cJSON_Delete(root);
+					return;
+				}
+                // Ensure any referenced subs actually exist and are present
+				for (BYTE *ptr = t->track; ptr && ptr < t->track + t->size; ptr = next_code(ptr)) {
+					if (*ptr == 0xEF) {
+						int subidx = *(WORD *)(ptr + 1);
+						if (subidx < 0 || subidx >= cur_song.subs || cur_song.sub[subidx].track == NULL) {
+							MessageBox2("Imported JSON: pattern references missing subroutine", "Import SPC JSON", MB_ICONEXCLAMATION);
+							free_song(&cur_song);
+							cJSON_Delete(root);
+							return;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for (int s = 0; s < cur_song.subs; s++) {
+		struct track* t = &cur_song.sub[s];
+		if (t->track) {
+			if (!validate_track(t->track, t->size, TRUE)) {
+				free_song(&cur_song);
+				cJSON_Delete(root);
+				return;
+			}
 		}
 	}
 
@@ -888,6 +1076,12 @@ static BOOL validate_playable(void) {
 LRESULT CALLBACK MainWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	// Forward all WM_CTLCOLOR* to the dark mode handler first
 	switch (uMsg) {
+    case WM_MEASUREITEM:
+		if (handle_measure_item((MEASUREITEMSTRUCT*)lParam)) return TRUE;
+		break;
+	case WM_DRAWITEM:
+		if (handle_draw_item((DRAWITEMSTRUCT*)lParam)) return TRUE;
+		break;
 	case WM_CTLCOLORSTATIC:
 	case WM_CTLCOLOREDIT:
 	case WM_CTLCOLORLISTBOX:
@@ -1003,9 +1197,15 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			HBRUSH bg = dark_mode ? hbrDarkBg : (HBRUSH)(COLOR_3DFACE + 1);
 			SetClassLongPtr(hwndMain, GCLP_HBRBACKGROUND, (LONG_PTR)bg);
 
-			// Apply theme to all registered window classes and repaint
+     // Apply theme to all registered window classes and repaint
 			set_window_theme_recursive(hwndMain, dark_mode);
 			broadcast_dark_mode();
+
+		// Toggle owner-draw state for menus depending on dark mode
+      set_menu_owner_draw(hmenu, dark_mode);
+		if (hcontextmenu) set_menu_owner_draw(hcontextmenu, dark_mode);
+		set_menu_background(hmenu, dark_mode);
+		if (hcontextmenu) set_menu_background(hcontextmenu, dark_mode);
 
 			RedrawWindow(hwndMain, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
 			break;
@@ -1178,7 +1378,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	ShowWindow(hwndMain, nCmdShow);
 
 	hmenu = GetMenu(hwndMain);
-	CheckMenuItem(hmenu, ID_DARK_MODE, dark_mode ? MF_CHECKED : MF_UNCHECKED);
+  CheckMenuItem(hmenu, ID_DARK_MODE, dark_mode ? MF_CHECKED : MF_UNCHECKED);
+       // Only enable owner-draw for dark mode; keep default menus otherwise
+		set_menu_owner_draw(hmenu, dark_mode);
+		set_menu_background(hmenu, dark_mode);
 	CheckMenuRadioItem(hmenu, ID_OCTAVE_1, ID_OCTAVE_1 + 4, ID_OCTAVE_1 + 2, MF_BYCOMMAND);
 	hcontextmenu = LoadMenu(hInstance, MAKEINTRESOURCE(IDM_CONTEXTMENU));
 	HACCEL hAccel = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDA_ACCEL));
