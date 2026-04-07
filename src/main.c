@@ -97,7 +97,50 @@ static void rebuild_dark_brushes(void) {
 		hbrDarkBg = CreateSolidBrush(DM_BG);
 		hbrDarkBg2 = CreateSolidBrush(DM_BG2);
 		hbrDarkEdit = CreateSolidBrush(DM_BG2);
-       }
+    }
+}
+
+// Implementation placed after helpers to avoid interleaving with other code
+static char* strip_json_comments(const char* src) {
+	if (!src) return NULL;
+	size_t len = strlen(src);
+	char* out = malloc(len + 1);
+	if (!out) return NULL;
+	size_t i = 0, j = 0;
+	int in_str = 0;
+	int in_sline = 0;
+	int in_mline = 0;
+	while (i < len) {
+		char c = src[i];
+		char next = (i + 1 < len) ? src[i+1] : '\0';
+		if (in_sline) {
+			if (c == '\n') {
+				in_sline = 0;
+				out[j++] = c;
+			}
+			i++;
+			continue;
+		}
+		if (in_mline) {
+			if (c == '*' && next == '/') { in_mline = 0; i += 2; continue; }
+			i++;
+			continue;
+		}
+		if (in_str) {
+			if (c == '\\' && next) { out[j++] = c; out[j++] = next; i += 2; continue; }
+			if (c == '"') in_str = 0;
+			out[j++] = c;
+			i++;
+			continue;
+		}
+		if (c == '/' && next == '/') { in_sline = 1; i += 2; continue; }
+		if (c == '/' && next == '*') { in_mline = 1; i += 2; continue; }
+		if (c == '"') { in_str = 1; out[j++] = c; i++; continue; }
+		out[j++] = c;
+		i++;
+	}
+    out[j] = '\0';
+	return out;
 }
 
 // Set or clear a background brush on a menu and its submenus (recursive).
@@ -352,26 +395,24 @@ static void write_spc_json(FILE* f) {
 	cJSON_AddItemToObject(root, "patterns", patterns_obj);
 
 	// Subs
-	cJSON* subs_arr = cJSON_CreateArray();
-    for (int s = 0; s < cur_song.subs; s++) {
+  cJSON* subs_arr = cJSON_CreateArray();
+	for (int s = 0; s < cur_song.subs; s++) {
 		struct track* t = &cur_song.sub[s];
 		if (!t->track) {
 			cJSON_AddItemToArray(subs_arr, cJSON_CreateNull());
 		} else {
-			// embed subroutine bytes as base64 in a single string to preserve exact SPC sample/block data
-			char* b64 = base64_encode(t->track, t->size + 1);
-			if (b64) {
-				cJSON_AddItemToArray(subs_arr, cJSON_CreateString(b64));
-				free(b64);
-			} else {
-				cJSON_AddItemToArray(subs_arr, cJSON_CreateNull());
-			}
+			// store subs as raw byte arrays (legacy-friendly, not base64)
+			cJSON_AddItemToArray(subs_arr, make_byte_array(t->track, t->size + 1));
 		}
 	}
 	cJSON_AddItemToObject(root, "subs", subs_arr);
 
 	cJSON_AddNumberToObject(root, "inst_base", inst_base);
 	cJSON_AddNumberToObject(root, "sample_ptr_base", sample_ptr_base);
+
+	// preserve loop/repeat information
+	cJSON_AddNumberToObject(root, "repeat", cur_song.repeat);
+	cJSON_AddNumberToObject(root, "repeat_pos", cur_song.repeat_pos);
 
 	// Embed entire SPC image as base64 so imports can restore samples exactly
 	char* spc_b64 = base64_encode(spc, 0x10000);
@@ -413,7 +454,9 @@ static void import_spc_json_from_file(const char* path) {
 	data[flen] = '\0';
 	fclose(f);
 
-	cJSON* root = cJSON_Parse(data);
+    char* cleaned = strip_json_comments(data);
+	cJSON* root = cJSON_Parse(cleaned ? cleaned : data);
+	free(cleaned);
 	free(data);
 	if (!root) {
 		const char* err = cJSON_GetErrorPtr();
@@ -456,6 +499,13 @@ static void import_spc_json_from_file(const char* path) {
 		}
 	}
 
+    // Read repeat/loop fields if present (temporarily store, applied later)
+	int json_repeat = -1, json_repeat_pos = -1;
+	item = cJSON_GetObjectItem(root, "repeat");
+	if (item && cJSON_IsNumber(item)) json_repeat = item->valueint;
+	item = cJSON_GetObjectItem(root, "repeat_pos");
+	if (item && cJSON_IsNumber(item)) json_repeat_pos = item->valueint;
+
 	// ── Read order array ──────────────────────────────────────────────────────
 	cJSON* order_arr = cJSON_GetObjectItem(root, "order");
 	int actual_order_len = (order_arr && cJSON_IsArray(order_arr)) ? cJSON_GetArraySize(order_arr) : 0;
@@ -481,11 +531,11 @@ static void import_spc_json_from_file(const char* path) {
 	// ── Rebuild cur_song ──────────────────────────────────────────────────────
    free_song(&cur_song);
 
-	cur_song.address = music_addr;
+    cur_song.address = music_addr;
 	cur_song.order_length = order_length;
- // initialize repeat fields to safe defaults in case JSON lacks them
-	cur_song.repeat = 0;
-	cur_song.repeat_pos = 0;
+	// apply repeat fields from JSON if present
+	cur_song.repeat = (json_repeat >= 0) ? json_repeat : 0;
+	cur_song.repeat_pos = (json_repeat_pos >= 0) ? json_repeat_pos : 0;
 	// allocate order array
 	if (order_length > 0) {
 		cur_song.order = malloc(sizeof(int) * order_length);
