@@ -100,6 +100,23 @@ static void rebuild_dark_brushes(void) {
     }
 }
 
+// Find the HMENU that contains a command id (searches recursively). Returns the menu or NULL.
+static HMENU find_menu_by_command(HMENU menu, UINT id) {
+	if (!menu) return NULL;
+	int cnt = GetMenuItemCount(menu);
+	for (int i = 0; i < cnt; i++) {
+		UINT mid = GetMenuItemID(menu, i);
+		if ((UINT)-1 == mid) {
+			HMENU sub = GetSubMenu(menu, i);
+			HMENU res = find_menu_by_command(sub, id);
+			if (res) return res;
+		} else if (mid == id) {
+			return menu;
+		}
+	}
+    return NULL;
+}
+
 // Implementation placed after helpers to avoid interleaving with other code
 static char* strip_json_comments(const char* src) {
 	if (!src) return NULL;
@@ -207,20 +224,54 @@ static BOOL handle_draw_item(DRAWITEMSTRUCT* dis) {
 	if (!dis || dis->CtlType != ODT_MENU) return FALSE;
 	HDC hdc = dis->hDC;
 	RECT rc = dis->rcItem;
-	HBRUSH fill = dark_mode && hbrDarkBg ? hbrDarkBg : GetSysColorBrush(COLOR_MENU);
-	FillRect(hdc, &rc, fill);
+    HBRUSH fill = dark_mode && hbrDarkBg ? hbrDarkBg : GetSysColorBrush(COLOR_MENU);
 	COLORREF fg = dark_mode ? DM_FG : GetSysColor(COLOR_MENUTEXT);
-	SetTextColor(hdc, fg);
 	SetBkMode(hdc, TRANSPARENT);
-    char text[256] = "";
+	char text[256] = "";
 	// Find the menu text from the main menu or context menu
 	HMENU root = GetMenu(hwndMain);
 	BOOL got = find_menu_string(root, dis->itemID, text, sizeof(text));
 	if (!got && hcontextmenu) got = find_menu_string(hcontextmenu, dis->itemID, text, sizeof(text));
-    if (got) {
-		// For dark mode ensure context menu text uses light color
-		if (dark_mode) SetTextColor(hdc, DM_FG);
-		DrawTextA(hdc, text, -1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    // determine visual state
+	BOOL selected = (dis->itemState & ODS_SELECTED) != 0;
+	BOOL disabled = (dis->itemState & ODS_DISABLED) != 0;
+	if (selected) {
+		// highlight selection
+		HBRUSH hsel = CreateSolidBrush(DM_ACCENT);
+		FillRect(hdc, &rc, hsel);
+		DeleteObject(hsel);
+		SetTextColor(hdc, DM_FG);
+	} else {
+		FillRect(hdc, &rc, fill);
+		SetTextColor(hdc, disabled ? RGB(140,140,140) : fg);
+	}
+
+	if (got) {
+        // draw optional checkmark if the menu item is checked
+		HMENU m = find_menu_by_command(root, dis->itemID);
+		if (!m && hcontextmenu) m = find_menu_by_command(hcontextmenu, dis->itemID);
+		BOOL checked = FALSE;
+		if (m) {
+			UINT st = GetMenuState(m, dis->itemID, MF_BYCOMMAND);
+			if ((st & MF_CHECKED) == MF_CHECKED) checked = TRUE;
+		}
+
+		RECT txt = rc;
+		const int check_w = 20;
+		if (checked) {
+			RECT crect = rc;
+			crect.right = crect.left + check_w;
+			// draw a small indicator
+			HBRUSH hb = CreateSolidBrush(DM_FG);
+			InflateRect(&crect, -6, -6);
+			FillRect(hdc, &crect, hb);
+			DeleteObject(hb);
+			txt.left += check_w;
+		} else {
+			txt.left += check_w;
+		}
+
+		DrawTextA(hdc, text, -1, &txt, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	}
 	return TRUE;
 }
@@ -1226,6 +1277,13 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			else {
 				MessageBox2("No song loaded", "Export SPC JSON", MB_ICONEXCLAMATION);
 			}
+          break;
+		}
+		case ID_EXPORT_MIDI: {
+			// Export MIDI + sample dump
+			char* file = open_dialog(GetSaveFileName,
+				"MIDI files (*.mid)\0*.mid\0", "mid", OFN_OVERWRITEPROMPT);
+			if (file) export_song_to_midi(file);
 			break;
 		}
 		case ID_EXPORT_SPC: export_spc(); break;

@@ -40,6 +40,10 @@
 #define ID_OCTAVE_1 150
 #define ID_HELP 160
 #define ID_ABOUT 161
+// MIDI export
+#define ID_EXPORT_MIDI 162
+#define IDD_SET_BPM 170
+#define IDC_BPM 171
 #define IDA_ACCEL 1
 #define IDD_OPTIONS 1
 #define IDC_RATE 3

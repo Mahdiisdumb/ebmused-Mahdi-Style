@@ -30,12 +30,14 @@
     <ClCompile Include="src\main.c" />
     <ClCompile Include="src\metadata.c" />
     <ClCompile Include="src\midi.c" />
+    <ClCompile Include="src\midi_export.c" />
     <ClCompile Include="src\misc.c" />
     <ClCompile Include="src\packlist.c" />
     <ClCompile Include="src\packs.c" />
     <ClCompile Include="src\parser.c" />
     <ClCompile Include="src\play.c" />
     <ClCompile Include="src\ranges.c" />
+    <ClCompile Include="src\sf2_export.c" />
     <ClCompile Include="src\song.c" />
     <ClCompile Include="src\songed.c" />
     <ClCompile Include="src\sound.c" />

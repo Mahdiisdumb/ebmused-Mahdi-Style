@@ -3,9 +3,48 @@
 #include <stdlib.h>
 #include "ebmusv2.h"
 #include "misc.h"
+#include "id.h"
 
 void enable_menu_items(const BYTE *list, int flags) {
 	while (*list) EnableMenuItem(hmenu, *list++, flags);
+}
+
+// Simple modal input box for a single edit control
+static BOOL CALLBACK InputDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	switch (msg) {
+	case WM_INITDIALOG: {
+		// lParam is pointer to struct { char *out; int outlen; }
+		void* p = (void*)lParam;
+		SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)p);
+		return TRUE;
+	}
+	case WM_COMMAND:
+		if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
+			if (LOWORD(wParam) == IDOK) {
+				void* vp = (void*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+				if (vp) {
+					// vp points to a small struct passed by InputBox; first field is output buffer pointer, second is length
+					char** bufp = (char**)vp;
+					char* outbuf = bufp[0];
+					int outlen = (int)(intptr_t)bufp[1];
+					GetDlgItemText(hwnd, IDC_BPM, outbuf, outlen);
+				}
+			}
+			EndDialog(hwnd, LOWORD(wParam));
+			return TRUE;
+		}
+		break;
+	}
+	return FALSE;
+}
+
+BOOL InputBox(const char* title, const char* prompt, char* outbuf, int outlen) {
+	// pass a small two-pointer array on the stack to the dialog via lParam
+	char* ptrs[2];
+	ptrs[0] = outbuf;
+	ptrs[1] = (char*)(intptr_t)outlen;
+	int res = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_SET_BPM), hwndMain, InputDlgProc, (LPARAM)ptrs);
+	return res == IDOK;
 }
 
 void update_menu_item(UINT item, LPTSTR label) {

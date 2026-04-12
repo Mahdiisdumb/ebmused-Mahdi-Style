@@ -33,5 +33,6 @@ HFONT order_font(void);
 //  word-addressed architectures. This is x86 so it's ok)
 void *array_insert(/*void **array, int *size, int elemsize, int index*/);
 void array_delete(void *array, int *size, int elemsize, int index);
+BOOL InputBox(const char* title, const char* prompt, char* outbuf, int outlen);
 
 #endif // MISC_H

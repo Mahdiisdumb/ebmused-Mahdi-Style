@@ -5,6 +5,7 @@
 #include <windows.h>
 #include "structs.h"
 #include "../libs/cJSON.h"
+#include <stdint.h>
 
 #ifdef NDEBUG
 #define printf(x,...)
@@ -109,6 +110,8 @@ int note_from_key(int key, BOOL shift);
 // midi.c
 void closeMidiInDevice();
 void openMidiInDevice(int deviceId, void* callback);
+// midi export
+BOOL export_song_to_midi(const char *path);
 
 // parser.c
 extern const BYTE code_length[];
