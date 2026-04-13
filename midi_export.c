@@ -207,14 +207,36 @@ BOOL export_song_to_midi(const char* path) {
     w32(f, end - lp - 4);
     fseek(f, end, SEEK_SET);
 
-    // ---------- tracks ----------
-    for (int i = 0; i < inst_count; i++) {
+    if (ev_count == 0) {
+        // nothing to write besides tempo
+    } else {
+        // ---------- tracks ----------
+        for (int i = 0; i < inst_count; i++) {
 
         fwrite("MTrk", 1, 4, f);
         long tp = ftell(f);
         w32(f, 0);
 
         uint64_t last = 0;
+
+        // Insert a track name and a program change for the first channel used by this instrument
+        int first_idx = -1;
+        for (int j = 0; j < ev_count; j++) if (events[j].inst == i) { first_idx = j; break; }
+        if (first_idx >= 0) {
+            // Track name meta
+            char tname[32];
+            snprintf(tname, sizeof(tname), "inst_%03d", i);
+            var(f, 0);
+            fputc(0xFF, f); fputc(0x03, f); var(f, (uint32_t)strlen(tname));
+            fwrite(tname, 1, strlen(tname), f);
+
+            // Program change on first channel used
+            unsigned char ch = events[first_idx].status & 0x0F;
+            unsigned char program = (unsigned char)(i % 128);
+            var(f, 0);
+            fputc(0xC0 | (ch & 0x0F), f);
+            fputc(program, f);
+        }
 
         for (int j = 0; j < ev_count; j++) {
             if (events[j].inst != i) continue;
@@ -236,7 +258,10 @@ BOOL export_song_to_midi(const char* path) {
         fseek(f, tp, SEEK_SET);
         w32(f, te - tp - 4);
         fseek(f, te, SEEK_SET);
-    }
+        }
+        /* end for each instrument track */
+        }
+    /* end if (ev_count != 0) */
 
     fclose(f);
 

@@ -4,7 +4,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "structs.h"
-#include "../libs/cJSON.h"
+#include "cJSON.h"
 #include <stdint.h>
 
 #ifdef NDEBUG

@@ -19,50 +19,49 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="libs\cJSON.c" />
-    <ClCompile Include="libs\cJSON_Utils.c" />
-    <ClCompile Include="src\bgmlist.c" />
-    <ClCompile Include="src\brr.c" />
-    <ClCompile Include="src\ctrltbl.c" />
-    <ClCompile Include="src\help.c" />
-    <ClCompile Include="src\inst.c" />
-    <ClCompile Include="src\loadrom.c" />
-    <ClCompile Include="src\main.c" />
-    <ClCompile Include="src\metadata.c" />
-    <ClCompile Include="src\midi.c" />
-    <ClCompile Include="src\midi_export.c" />
-    <ClCompile Include="src\misc.c" />
-    <ClCompile Include="src\packlist.c" />
-    <ClCompile Include="src\packs.c" />
-    <ClCompile Include="src\parser.c" />
-    <ClCompile Include="src\play.c" />
-    <ClCompile Include="src\ranges.c" />
-    <ClCompile Include="src\sf2_export.c" />
-    <ClCompile Include="src\song.c" />
-    <ClCompile Include="src\songed.c" />
-    <ClCompile Include="src\sound.c" />
-    <ClCompile Include="src\status.c" />
-    <ClCompile Include="src\text.c" />
-    <ClCompile Include="src\tracker.c" />
+    <ClCompile Include="bgmlist.c" />
+    <ClCompile Include="brr.c" />
+    <ClCompile Include="ctrltbl.c" />
+    <ClCompile Include="help.c" />
+    <ClCompile Include="inst.c" />
+    <ClCompile Include="cJSON.c" />
+    <ClCompile Include="loadrom.c" />
+    <ClCompile Include="main.c" />
+    <ClCompile Include="metadata.c" />
+    <ClCompile Include="midi.c" />
+    <ClCompile Include="midi_export.c" />
+    <ClCompile Include="misc.c" />
+    <ClCompile Include="packlist.c" />
+    <ClCompile Include="packs.c" />
+    <ClCompile Include="parser.c" />
+    <ClCompile Include="play.c" />
+    <ClCompile Include="ranges.c" />
+    <ClCompile Include="sf2_export.c" />
+    <ClCompile Include="song.c" />
+    <ClCompile Include="songed.c" />
+    <ClCompile Include="sound.c" />
+    <ClCompile Include="status.c" />
+    <ClCompile Include="text.c" />
+    <ClCompile Include="tracker.c" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\blank.spc" />
+    <None Include="blank.spc" />
   </ItemGroup>
   <ItemGroup>
-    <Manifest Include="src\ebmused.exe.manifest" />
+    <Manifest Include="ebmused.exe.manifest" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="libs\cJSON.h" />
-    <ClInclude Include="src\ebmusv2.h" />
-    <ClInclude Include="src\id.h" />
-    <ClInclude Include="src\misc.h" />
-    <ClInclude Include="src\structs.h" />
+    <ClInclude Include="ebmusv2.h" />
+    <ClInclude Include="id.h" />
+    <ClInclude Include="cJSON.h" />
+    <ClInclude Include="misc.h" />
+    <ClInclude Include="structs.h" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="src\record.ico" />
+    <Image Include="record.ico" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="src\resource.rc" />
+    <ResourceCompile Include="resource.rc" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{490C16A6-0881-4332-A0E9-9E7CAF569779}</ProjectGuid>
