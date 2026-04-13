@@ -143,7 +143,8 @@ void decode_samples(const unsigned char *ptrtable) {
 			continue;
 		}
 
-		sa->data = p;
+        sa->data = p;
+		sa->id = sn;
 
 		int needs_another_loop;
 		int first_block = TRUE;

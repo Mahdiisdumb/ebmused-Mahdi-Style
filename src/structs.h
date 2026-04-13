@@ -41,65 +41,68 @@ struct slider {
 	BYTE cycles, target;
 };
 
+// Channel state (made a top-level type so it can be referenced from C/C++ files)
+struct channel_state {
+	BYTE *ptr;
+
+	int next; // time left in note
+
+	struct slider note; BYTE cur_port_start_ctr;
+	BYTE note_len, note_style;
+
+	BYTE note_release; // time to release note, in cycles
+
+	int sub_start; // current subroutine number
+	BYTE *sub_ret; // where to return to after sub
+	BYTE sub_count; // number of loops
+
+	BYTE inst; // instrument
+	BYTE inst_adsr1;
+	BYTE inst_adsr2;
+	BYTE inst_gain;
+	BYTE finetune;
+	signed char transpose;
+	struct slider panning; BYTE pan_flags;
+	struct slider volume;
+	BYTE total_vol;
+	signed char left_vol, right_vol;
+
+	BYTE port_type, port_start, port_length, port_range;
+	BYTE vibrato_start, vibrato_speed, vibrato_max_range, vibrato_fadein;
+	BYTE tremolo_start, tremolo_speed, tremolo_range;
+
+	BYTE vibrato_phase, vibrato_start_ctr, cur_vib_range;
+	BYTE vibrato_fadein_ctr, vibrato_range_delta;
+	BYTE tremolo_phase, tremolo_start_ctr;
+
+	struct sample *samp;
+	int samp_pos, note_freq;
+
+	// Envelope state for the current/previous 32 KHz tick...
+	enum envelope_state {
+		ENV_STATE_ATTACK,
+		ENV_STATE_DECAY,
+		ENV_STATE_SUSTAIN,
+		ENV_STATE_KEY_OFF,
+		ENV_STATE_GAIN
+	} env_state;
+	// ...and for the next 32 KHz tick
+	enum envelope_state next_env_state;
+	// Envelope height for the current/previous 32 KHz tick...
+	short env_height;
+	// ...and for the next 32 KHz tick, for interpolation purposes
+	short next_env_height;
+	unsigned short env_counter;
+	unsigned env_fractional_counter;
+	short attack_rate;
+	short decay_rate;
+	short sustain_level;
+	short sustain_rate;
+	short gain_rate;
+};
+
 struct song_state {
-	struct channel_state {
-		BYTE *ptr;
-
-		int next; // time left in note
-
-		struct slider note; BYTE cur_port_start_ctr;
-		BYTE note_len, note_style;
-
-		BYTE note_release; // time to release note, in cycles
-
-		int sub_start; // current subroutine number
-		BYTE *sub_ret; // where to return to after sub
-		BYTE sub_count; // number of loops
-
-		BYTE inst; // instrument
-		BYTE inst_adsr1;
-		BYTE inst_adsr2;
-		BYTE inst_gain;
-		BYTE finetune;
-		signed char transpose;
-		struct slider panning; BYTE pan_flags;
-		struct slider volume;
-		BYTE total_vol;
-		signed char left_vol, right_vol;
-
-		BYTE port_type, port_start, port_length, port_range;
-		BYTE vibrato_start, vibrato_speed, vibrato_max_range, vibrato_fadein;
-		BYTE tremolo_start, tremolo_speed, tremolo_range;
-
-		BYTE vibrato_phase, vibrato_start_ctr, cur_vib_range;
-		BYTE vibrato_fadein_ctr, vibrato_range_delta;
-		BYTE tremolo_phase, tremolo_start_ctr;
-
-		struct sample *samp;
-		int samp_pos, note_freq;
-
-		// Envelope state for the current/previous 32 KHz tick...
-		enum envelope_state {
-			ENV_STATE_ATTACK,
-			ENV_STATE_DECAY,
-			ENV_STATE_SUSTAIN,
-			ENV_STATE_KEY_OFF,
-			ENV_STATE_GAIN
-		} env_state;
-		// ...and for the next 32 KHz tick
-		enum envelope_state next_env_state;
-		// Envelope height for the current/previous 32 KHz tick...
-		short env_height;
-		// ...and for the next 32 KHz tick, for interpolation purposes
-		short next_env_height;
-		unsigned short env_counter;
-		unsigned env_fractional_counter;
-		short attack_rate;
-		short decay_rate;
-		short sustain_level;
-		short sustain_rate;
-		short gain_rate;
-	} chan[INST_MAX_POLYPHONY];
+	struct channel_state chan[INST_MAX_POLYPHONY];
 	signed char transpose;
 	struct slider volume;
 	struct slider tempo;
@@ -114,6 +117,7 @@ struct sample {
 	short *data;
 	int length;
 	int loop_len;
+    int id;
 };
 
 struct block {
