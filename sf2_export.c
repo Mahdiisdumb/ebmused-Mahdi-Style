@@ -15,6 +15,8 @@ extern int inst_base;
 #define MAX_INSTRUMENTS 256
 #endif
 
+#define SNES_SAMPLE_RATE 32000
+
 /* ================= WAV + FFMPEG ================= */
 
 static int convert_with_ffmpeg_temp(
@@ -208,7 +210,7 @@ BOOL export_sf2(const char* path, int* inst_list, int inst_count) {
         uint32_t outlen = 0;
 
         if (convert_with_ffmpeg_temp(sa->data, sa->length,
-            mixrate ? mixrate : 44100, &outbuf, &outlen)) {
+            SNES_SAMPLE_RATE, &outbuf, &outlen)) {
 
             fwrite(outbuf, sizeof(short), outlen, f);
             actual_len[i] = outlen;
@@ -313,16 +315,31 @@ BOOL export_sf2(const char* path, int* inst_list, int inst_count) {
         char name[20] = { 0 };
         snprintf(name, sizeof(name), "s%03d", i);
         fwrite(name, 1, 20, f);
-
         uint32_t start = cursor2;
         uint32_t end = start + actual_len[i];
 
-        w32(f, start);
-        w32(f, end);
-        w32(f, start);
-        w32(f, end);
+        /* compute loop points from original sample metadata if available */
+        int sidx = samples_for_inst[i];
+        uint32_t loop_start = start;
+        uint32_t loop_end = start;
+        if (sidx >= 0 && sidx < 128) {
+            struct sample *sa = &samp[sidx];
+            if (sa->length > 0 && sa->loop_len > 0 && actual_len[i] > 0) {
+                double scale = (double)actual_len[i] / (double)sa->length;
+                uint32_t orig_loop_start = sa->length - sa->loop_len;
+                loop_start = start + (uint32_t)llround(orig_loop_start * scale);
+                loop_end = loop_start + (uint32_t)llround(sa->loop_len * scale);
+                if (loop_end > end) loop_end = end;
+            }
+        }
 
-        w32(f, mixrate ? mixrate : 44100);
+        w32(f, start);
+        w32(f, end);
+        w32(f, loop_start);
+        w32(f, loop_end);
+
+        /* use SNES sample rate: converted samples are written at SNES_SAMPLE_RATE */
+        w32(f, SNES_SAMPLE_RATE);
         fputc(60, f); fputc(0, f);
         w16(f, 0); w16(f, 1);
 
