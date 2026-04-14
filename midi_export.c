@@ -16,8 +16,23 @@ typedef struct {
 
 static int resolve_inst(struct channel_state* c) {
     if (!c) return -1;
-    /* Use instrument index (not current DSP/sample) so MIDI follows instruments */
-    return (int)c->inst;
+    /* Prefer explicit instrument field if it points to a valid instrument with a sample */
+    int inst = (int)c->inst;
+    if (inst >= 0 && inst < MAX_INSTRUMENTS) {
+        int samp_idx = spc[inst_base + 6*inst];
+        if (samp_idx >= 0 && samp_idx < 128 && samp[samp_idx].data)
+            return inst;
+    }
+
+    /* Fallback: try to find an instrument that refers to the current sample */
+    if (c->samp) {
+        int sid = c->samp->id;
+        for (int i = 0; i < MAX_INSTRUMENTS; i++) {
+            if (spc[inst_base + 6*i] == sid) return i;
+        }
+    }
+
+    return -1;
 }
 
 // ---------- helpers ----------
@@ -73,11 +88,13 @@ BOOL export_song_to_midi(const char* path) {
     struct song_state sim = pattop_state;
 
     int prev[8], note[8], note_inst[8];
+    int prev_inst[8];
 
     for (int i = 0; i < 8; i++) {
         prev[i] = sim.chan[i].samp_pos;
         note[i] = -1;
         note_inst[i] = -1;
+        prev_inst[i] = resolve_inst(&sim.chan[i]);
     }
 
     uint64_t step = 0;
@@ -91,6 +108,9 @@ BOOL export_song_to_midi(const char* path) {
         for (int ch = 0; ch < 8; ch++) {
             sim.chan[ch].ptr = cur_song.pattern[pat][ch].track;
             sim.chan[ch].sub_count = 0;
+            /* reset per-channel previous state for this pattern so we detect changes correctly */
+            prev[ch] = sim.chan[ch].samp_pos;
+            prev_inst[ch] = resolve_inst(&sim.chan[ch]);
         }
 
         while (do_cycle_no_sound(&sim)) {
@@ -102,13 +122,36 @@ BOOL export_song_to_midi(const char* path) {
 
                 struct channel_state* c = &sim.chan[ch];
                 int raw_inst = resolve_inst(c);
+                int old_inst = prev_inst[ch];
+
+                /* Instrument changed on this DSP/channel: end previous note (if any) */
+                if (raw_inst != old_inst) {
+                    if (note[ch] >= 0 && note_inst[ch] == old_inst) {
+                        add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x80 | (ch & 0xF)), (unsigned char)note[ch], 0, old_inst });
+                        note[ch] = -1;
+                    }
+
+                    /* start new note only if the new instrument is valid and a sample is active */
+                    if (raw_inst >= 0 && raw_inst < 128 && q >= 0 && (sim.chan[ch].note.cur >> 8) & 0x7F) {
+                        int n = (sim.chan[ch].note.cur >> 8) & 0x7F;
+                        int v = (sim.chan[ch].total_vol * 127) / 255;
+                        used_inst[raw_inst] = 1;
+                        note[ch] = n;
+                        note_inst[ch] = raw_inst;
+                        add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x90 | (ch & 0xF)), (unsigned char)n, (unsigned char)v, raw_inst });
+                    }
+
+                    prev_inst[ch] = raw_inst;
+                }
+
+                /* If instrument is invalid, skip adding events that reference it */
                 if (raw_inst < 0 || raw_inst >= 128) {
                     prev[ch] = q;
                     continue;
                 }
 
-                // NOTE ON
-                if (p < 0 && q >= 0) {
+                // NOTE ON (only when sample just started and wasn't handled by inst-change above)
+                if (p < 0 && q >= 0 && note[ch] == -1) {
 
                     int n = (sim.chan[ch].note.cur >> 8) & 0x7F;
                     int v = (sim.chan[ch].total_vol * 127) / 255;
@@ -227,16 +270,18 @@ BOOL export_song_to_midi(const char* path) {
         int first_idx = -1;
         for (int j = 0; j < ev_count; j++) if (events[j].inst == i) { first_idx = j; break; }
         if (first_idx >= 0) {
+            // Map back to original instrument index
+            int orig_inst = inst_list[i];
             // Track name meta
             char tname[32];
-            snprintf(tname, sizeof(tname), "inst_%03d", i);
+            snprintf(tname, sizeof(tname), "inst_%03d", orig_inst);
             var(f, 0);
             fputc(0xFF, f); fputc(0x03, f); var(f, (uint32_t)strlen(tname));
             fwrite(tname, 1, strlen(tname), f);
 
             // Program change on first channel used
             unsigned char ch = events[first_idx].status & 0x0F;
-            unsigned char program = (unsigned char)(i % 128);
+            unsigned char program = (unsigned char)(orig_inst % 128);
             var(f, 0);
             fputc(0xC0 | (ch & 0x0F), f);
             fputc(program, f);
