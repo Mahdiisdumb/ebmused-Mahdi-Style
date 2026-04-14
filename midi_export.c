@@ -6,7 +6,7 @@
 #include "ebmusv2.h"
 #include "misc.h"
 
-extern BOOL export_sf2(const char* path, int* inst_map, int inst_count);
+extern BOOL export_sf2(const char* path, int* inst_list, int inst_count);
 
 typedef struct {
     uint64_t tick;
@@ -15,8 +15,9 @@ typedef struct {
 } MidiEvent;
 
 static int resolve_inst(struct channel_state* c) {
-    if (!c || !c->samp) return -1;
-    return c->samp->id;
+    if (!c) return -1;
+    /* Use instrument index (not current DSP/sample) so MIDI follows instruments */
+    return (int)c->inst;
 }
 
 // ---------- helpers ----------
@@ -44,7 +45,7 @@ static int add(MidiEvent** a, int* c, int* cap, MidiEvent e) {
     return 1;
 }
 static int cmp(const void* a, const void* b) {
-    const MidiEvent* A = a; const MidiEvent* B = b;
+    const MidiEvent* A = (const MidiEvent*)a; const MidiEvent* B = (const MidiEvent*)b;
     if (A->inst != B->inst) return A->inst - B->inst;
     if (A->tick < B->tick) return -1;
     if (A->tick > B->tick) return 1;
@@ -63,7 +64,8 @@ BOOL export_song_to_midi(const char* path) {
     if (bpm > 999) bpm = 999;
 
     int used_inst[128] = { 0 };
-    int inst_map[128];
+    int inst_index[128];
+    int inst_list[128];
 
     MidiEvent* events = NULL;
     int ev_count = 0, ev_cap = 0;
@@ -142,19 +144,21 @@ BOOL export_song_to_midi(const char* path) {
         }
     }
 
-    // ---------- build map (AFTER collect, correct order) ----------
+    // ---------- build instrument list (AFTER collect) ----------
     int inst_count = 0;
+    for (int i = 0; i < 128; i++) inst_index[i] = -1;
     for (int i = 0; i < 128; i++) {
-        if (used_inst[i])
-            inst_map[i] = inst_count++;
-        else
-            inst_map[i] = -1;
+        if (used_inst[i]) {
+            inst_list[inst_count] = i;
+            inst_index[i] = inst_count;
+            inst_count++;
+        }
     }
 
-    // ---------- REMAP EVENTS (THIS WAS MISSING) ----------
+    // ---------- REMAP EVENTS to instrument-track indices ----------
     for (int i = 0; i < ev_count; i++) {
         int raw = events[i].inst;
-        events[i].inst = inst_map[raw];
+        events[i].inst = (raw >= 0 && raw < 128) ? inst_index[raw] : -1;
     }
 
     qsort(events, ev_count, sizeof(MidiEvent), cmp);
@@ -265,7 +269,14 @@ BOOL export_song_to_midi(const char* path) {
 
     fclose(f);
 
-    export_sf2(path, inst_map, inst_count);
+    /* pass base path (without extension) to SF2 exporter */
+    char base[MAX_PATH];
+    strncpy(base, path, sizeof(base));
+    base[sizeof(base)-1] = '\0';
+    char *dot = strrchr(base, '.');
+    if (dot) *dot = '\0';
+
+    export_sf2(base, inst_list, inst_count);
 
     free(events);
 

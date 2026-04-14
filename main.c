@@ -1055,12 +1055,15 @@ static void export_spc() {
 
 static void write_spc(FILE* f) {
 	HRSRC res = FindResource(hinstance, MAKEINTRESOURCE(IDRC_SPC), RT_RCDATA);
-	HGLOBAL res_handle = res ? LoadResource(NULL, res) : NULL;
+    HGLOBAL res_handle = res ? LoadResource(NULL, res) : NULL;
 	if (!res_handle) { MessageBox2("Template SPC could not be loaded", "Export SPC", MB_ICONEXCLAMATION); return; }
 
 	BYTE* res_data = (BYTE*)LockResource(res_handle);
 	DWORD spc_size = SizeofResource(NULL, res);
-	BYTE* new_spc = memcpy(malloc(spc_size), res_data, spc_size);
+	if (!res_data || spc_size == 0) { MessageBox2("Template SPC resource invalid", "Export SPC", MB_ICONEXCLAMATION); return; }
+	BYTE* new_spc = malloc(spc_size);
+	if (!new_spc) { MessageBox2("Out of memory allocating SPC", "Export SPC", MB_ICONEXCLAMATION); return; }
+	memcpy(new_spc, res_data, spc_size);
 
 	BYTE spc_copy[0x10000];
 	memcpy(spc_copy, spc, 0x10000);

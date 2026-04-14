@@ -12,7 +12,7 @@ static void w32(FILE* f, unsigned int v) {
     fputc((v >> 16) & 0xFF, f); fputc((v >> 24) & 0xFF, f);
 }
 
-BOOL export_sf2(const char* path, int* inst_map, int inst_count) {
+BOOL export_sf2(const char* path, int* inst_list, int inst_count) {
     char out[MAX_PATH];
     snprintf(out, MAX_PATH, "%s.sf2", path);
 
@@ -35,11 +35,12 @@ BOOL export_sf2(const char* path, int* inst_map, int inst_count) {
 
     uint32_t cursor = 0;
 
-    // Write sample data in order of sample index; only samples present in inst_map are written.
-    for (int i = 0; i < 128; i++) {
-        if (inst_map[i] == -1) continue;
+    // Write sample data in order of instruments in inst_list
+    for (int idx = 0; idx < inst_count; idx++) {
+        int i = inst_list[idx];
+        if (i < 0 || i >= 128) continue;
         if (samp[i].data && samp[i].length > 0)
-            fwrite(samp[i].data, sizeof(short), samp[i].length, f);
+            fwrite(samp[i].data, sizeof(short), (size_t)samp[i].length, f);
     }
 
     short z = 0;
@@ -65,7 +66,7 @@ BOOL export_sf2(const char* path, int* inst_map, int inst_count) {
     w32(f, (inst_count + 1) * 38);
 
     for (int i = 0; i < inst_count; i++) {
-        char n[20] = { 0 }; sprintf(n, "p%03d", i);
+        char n[20] = { 0 }; snprintf(n, sizeof(n), "p%03d", i);
         fwrite(n, 1, 20, f);
         w16(f, i); w16(f, 0); w16(f, i);
         w32(f, 0); w32(f, 0); w32(f, 0);
@@ -92,7 +93,7 @@ BOOL export_sf2(const char* path, int* inst_map, int inst_count) {
     fwrite("inst", 1, 4, f);
     w32(f, (inst_count + 1) * 22);
     for (int i = 0; i < inst_count; i++) {
-        char n[20] = { 0 }; sprintf(n, "i%03d", i);
+        char n[20] = { 0 }; snprintf(n, sizeof(n), "i%03d", i);
         fwrite(n, 1, 20, f);
         w16(f, i);
     }
@@ -115,26 +116,27 @@ BOOL export_sf2(const char* path, int* inst_map, int inst_count) {
     fwrite("shdr", 1, 4, f);
     w32(f, (inst_count + 1) * 46);
 
-    for (int i = 0; i < 128; i++) {
-        if (inst_map[i] == -1) continue;
+    for (int idx = 0; idx < inst_count; idx++) {
+        int i = inst_list[idx];
+        if (i < 0 || i >= 128) continue;
 
         char n[20] = { 0 };
-        sprintf(n, "s%03d", inst_map[i]);
+        snprintf(n, sizeof(n), "s%03d", idx);
         fwrite(n, 1, 20, f);
 
         uint32_t start = cursor;
-        uint32_t end2 = cursor + (samp[i].length > 0 ? samp[i].length : 0);
+        uint32_t end2 = cursor + (samp[i].length > 0 ? (uint32_t)samp[i].length : 0u);
 
         w32(f, start);
         w32(f, end2);
         w32(f, end2);
         w32(f, end2);
 
-        w32(f, mixrate ? mixrate : 44100);
+        w32(f, (unsigned int)(mixrate ? mixrate : 44100));
         fputc(60, f); fputc(0, f);
         w16(f, 0); w16(f, 1);
 
-        cursor += samp[i].length > 0 ? samp[i].length : 0;
+        cursor += (samp[i].length > 0 ? (uint32_t)samp[i].length : 0u);
     }
 
     fwrite(zname, 1, 20, f);
