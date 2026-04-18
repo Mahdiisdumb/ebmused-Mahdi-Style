@@ -81,6 +81,19 @@ void set_inst(struct song_state *st, struct channel_state *c, int inst) {
 	}
 
 	c->inst = inst;
+    /* point channel to the sample used by this instrument so playback and exports
+	   that rely on c->samp see the current instrument's sample immediately */
+	{
+		BYTE *idata = &spc[inst_base + 6*inst];
+		if (inst >= 0 && inst < MAX_INSTRUMENTS) {
+			int samp_index = idata[0];
+			if (samp_index >= 0 && samp_index < 128 && samp[samp_index].data) {
+				c->samp = &samp[samp_index];
+				/* reset sample pointer so new instrument starts fresh when keyed */
+				c->samp_pos = -1;
+			}
+		}
+	}
 	c->inst_adsr1 = idata[1];
 	c->inst_adsr2 = idata[2];
 	c->inst_gain = idata[3];

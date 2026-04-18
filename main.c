@@ -100,6 +100,20 @@ static void rebuild_dark_brushes(void) {
     }
 }
 
+// Smarter dark mode detection: prefer system accent/UX setting when available
+static BOOL detect_system_dark_mode(void) {
+	BOOL is_dark = FALSE;
+	HKEY hKey;
+	if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+		DWORD val = 0; DWORD sz = sizeof(val);
+		if (RegQueryValueExA(hKey, "AppsUseLightTheme", NULL, NULL, (LPBYTE)&val, &sz) == ERROR_SUCCESS) {
+			is_dark = (val == 0);
+		}
+		RegCloseKey(hKey);
+	}
+	return is_dark;
+}
+
 // Find the HMENU that contains a command id (searches recursively). Returns the menu or NULL.
 static HMENU find_menu_by_command(HMENU menu, UINT id) {
 	if (!menu) return NULL;
@@ -285,13 +299,32 @@ static void apply_dark_titlebar(HWND hwnd, BOOL enable) {
 	DwmSetWindowAttribute(hwnd, 19, &value, sizeof(value));
 }
 
-// Set a window and all its children to use dark/light theme
-static void set_window_theme_recursive(HWND hwnd, BOOL enable) {
-	SetWindowTheme(hwnd, enable ? L"DarkMode_Explorer" : L"", NULL);
-	for (HWND child = GetWindow(hwnd, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT)) {
-		set_window_theme_recursive(child, enable);
+// Toggle dark mode following system preference unless user overrides in options
+static void maybe_apply_system_dark_mode(void) {
+	BOOL sys_dark = detect_system_dark_mode();
+    if (sys_dark != dark_mode) {
+		dark_mode = sys_dark;
+		CheckMenuItem(hmenu, ID_DARK_MODE, dark_mode ? MF_CHECKED : MF_UNCHECKED);
+		rebuild_dark_brushes();
+		apply_dark_titlebar(hwndMain, dark_mode);
+		apply_window_theme_recursive(hwndMain, dark_mode);
+		broadcast_theme_update();
 	}
 }
+
+// Set a window and all its children to use dark/light theme
+static void ebm_set_window_theme_recursive(HWND hwnd, BOOL enable) {
+	SetWindowTheme(hwnd, enable ? L"DarkMode_Explorer" : L"", NULL);
+	for (HWND child = GetWindow(hwnd, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT)) {
+		ebm_set_window_theme_recursive(child, enable);
+	}
+}
+
+// Backwards-compatible wrappers (older code may reference these names)
+void set_window_theme_recursive(HWND hwnd, BOOL enable) {
+	ebm_set_window_theme_recursive(hwnd, enable);
+}
+
 
 // Handle WM_CTLCOLOR* for dark mode — call this from any WndProc that hosts controls
 LRESULT handle_dark_ctlcolor(UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -323,13 +356,18 @@ LRESULT handle_dark_ctlcolor(UINT uMsg, WPARAM wParam, LPARAM lParam) {
 }
 
 // Broadcast a repaint + theme update to all child tab windows
-static void broadcast_dark_mode(void) {
+static void ebm_broadcast_theme_update(void) {
 	for (int i = 0; i < NUM_TABS; i++) {
 		if (tab_hwnd[i]) {
-			set_window_theme_recursive(tab_hwnd[i], dark_mode);
+			ebm_set_window_theme_recursive(tab_hwnd[i], dark_mode);
 			RedrawWindow(tab_hwnd[i], NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
 		}
 	}
+}
+
+// Backwards-compatible wrapper
+void broadcast_dark_mode(void) {
+	ebm_broadcast_theme_update();
 }
 
 // ─── File dialog ──────────────────────────────────────────────────────────────

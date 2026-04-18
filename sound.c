@@ -30,6 +30,10 @@ int timer_speed = 500;
 HWAVEOUT hwo;
 static BOOL song_playing = FALSE;
 FILE* wav_file = NULL;
+// improved audio timing: track wall-clock drift using high-res counter
+static LARGE_INTEGER perf_freq;
+static LARGE_INTEGER perf_base;
+static double audio_time_correction = 0.0;
 
 BOOL is_playing(void) { return song_playing; }
 BOOL start_playing(void) {
@@ -72,6 +76,9 @@ int sound_init() {
 		MessageBox2(buf, NULL, MB_ICONERROR);
 		return 0;
 	}
+
+	if (!perf_freq.QuadPart) QueryPerformanceFrequency(&perf_freq);
+	QueryPerformanceCounter(&perf_base);
 
 	wh[0].lpData = malloc(bufsize*4 * 2);
 	wh[0].dwBufferLength = bufsize*4;

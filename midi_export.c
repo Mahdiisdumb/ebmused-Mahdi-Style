@@ -5,6 +5,7 @@
 #include <math.h>
 #include "ebmusv2.h"
 #include "misc.h"
+#include <ctype.h>
 
 extern BOOL export_sf2(const char* path, int* inst_list, int inst_count);
 
@@ -12,6 +13,7 @@ typedef struct {
     uint64_t tick;
     unsigned char status, d1, d2;
     int inst;
+    int pat;
 } MidiEvent;
 
 static int resolve_inst(struct channel_state* c) {
@@ -62,8 +64,8 @@ static int add(MidiEvent** a, int* c, int* cap, MidiEvent e) {
 static int cmp(const void* a, const void* b) {
     const MidiEvent* A = (const MidiEvent*)a; const MidiEvent* B = (const MidiEvent*)b;
     if (A->inst != B->inst) return A->inst - B->inst;
-    if (A->tick < B->tick) return -1;
-    if (A->tick > B->tick) return 1;
+    if (A->tick < B->tick) return -1; // Keep comparator stable
+    if (A->tick > B->tick) return 1;  // Keep comparator stable
     return 0;
 }
 
@@ -127,7 +129,7 @@ BOOL export_song_to_midi(const char* path) {
                 /* Instrument changed on this DSP/channel: end previous note (if any) */
                 if (raw_inst != old_inst) {
                     if (note[ch] >= 0 && note_inst[ch] == old_inst) {
-                        add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x80 | (ch & 0xF)), (unsigned char)note[ch], 0, old_inst });
+                        add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x80 | (ch & 0xF)), (unsigned char)note[ch], 0, old_inst, pat });
                         note[ch] = -1;
                     }
 
@@ -138,7 +140,7 @@ BOOL export_song_to_midi(const char* path) {
                         used_inst[raw_inst] = 1;
                         note[ch] = n;
                         note_inst[ch] = raw_inst;
-                        add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x90 | (ch & 0xF)), (unsigned char)n, (unsigned char)v, raw_inst });
+                    add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x90 | (ch & 0xF)), (unsigned char)n, (unsigned char)v, raw_inst, pat });
                     }
 
                     prev_inst[ch] = raw_inst;
@@ -151,7 +153,7 @@ BOOL export_song_to_midi(const char* path) {
                 }
 
                 // NOTE ON (only when sample just started and wasn't handled by inst-change above)
-                if (p < 0 && q >= 0 && note[ch] == -1) {
+               if (p < 0 && q >= 0 && note[ch] == -1) {
 
                     int n = (sim.chan[ch].note.cur >> 8) & 0x7F;
                     int v = (sim.chan[ch].total_vol * 127) / 255;
@@ -160,13 +162,13 @@ BOOL export_song_to_midi(const char* path) {
                     note_inst[ch] = raw_inst;
                     used_inst[raw_inst] = 1;
 
-                    add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x90 | (ch & 0xF)), (unsigned char)n, (unsigned char)v, raw_inst });
+                    add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x90 | (ch & 0xF)), (unsigned char)n, (unsigned char)v, raw_inst, pat });
                 }
 
                 // NOTE OFF
                 if (p >= 0 && q < 0 && note[ch] >= 0) {
 
-                    add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x80 | (ch & 0xF)), (unsigned char)note[ch], 0, note_inst[ch] });
+                    add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0x80 | (ch & 0xF)), (unsigned char)note[ch], 0, note_inst[ch], pat });
 
                     note[ch] = -1;
                 }
@@ -178,7 +180,7 @@ BOOL export_song_to_midi(const char* path) {
 
                 int midi_pan = (pan * 127) / 255;
 
-                add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0xB0 | (ch & 0xF)), 10, (unsigned char)midi_pan, raw_inst });
+                add(&events, &ev_count, &ev_cap, (MidiEvent){ step, (unsigned char)(0xB0 | (ch & 0xF)), 10, (unsigned char)midi_pan, raw_inst, pat });
 
                 prev[ch] = q;
             }
@@ -188,22 +190,39 @@ BOOL export_song_to_midi(const char* path) {
     }
 
     // ---------- build instrument list (AFTER collect) ----------
+    // Build per-pattern+instrument tracks: track id composed as (pattern_index * 256 + inst_index)
     int inst_count = 0;
-    for (int i = 0; i < 128; i++) inst_index[i] = -1;
-    for (int i = 0; i < 128; i++) {
-        if (used_inst[i]) {
-            inst_list[inst_count] = i;
-            inst_index[i] = inst_count;
-            inst_count++;
+    // map raw_inst to array of pattern-specific track indices: map[pattern][raw_inst] -> track id
+    int map[256][128];
+    memset(map, -1, sizeof(map));
+    for (int p = 0; p < cur_song.order_length; p++) {
+        for (int i = 0; i < 128; i++) {
+            // see if this raw instrument appears in this pattern
+            for (int e = 0; e < ev_count; e++) {
+                if (events[e].pat == p && events[e].inst == i) {
+                    if (map[p][i] == -1) {
+                        map[p][i] = inst_count;
+                        inst_list[inst_count] = i; // store raw inst for this new track
+                        inst_count++;
+                    }
+                    break;
+                }
+            }
         }
     }
 
-    // ---------- REMAP EVENTS to instrument-track indices ----------
+    // ---------- REMAP EVENTS to per-pattern instrument track indices ----------
     for (int i = 0; i < ev_count; i++) {
         int raw = events[i].inst;
-        events[i].inst = (raw >= 0 && raw < 128) ? inst_index[raw] : -1;
+        int pat = events[i].pat;
+        if (pat < 0 || pat >= cur_song.order_length || raw < 0 || raw >= 128) {
+            events[i].inst = -1;
+        } else {
+            events[i].inst = map[pat][raw];
+        }
     }
 
+    // sort by track then tick
     qsort(events, ev_count, sizeof(MidiEvent), cmp);
 
     FILE* f = fopen(path, "wb");
@@ -314,14 +333,40 @@ BOOL export_song_to_midi(const char* path) {
 
     fclose(f);
 
-    /* pass base path (without extension) to SF2 exporter */
+    /* build SF2 filename from song title (underscores for spaces) and same directory as MIDI */
     char base[MAX_PATH];
-    strncpy(base, path, sizeof(base));
-    base[sizeof(base)-1] = '\0';
-    char *dot = strrchr(base, '.');
-    if (dot) *dot = '\0';
+    strncpy(base, path, sizeof(base)); base[sizeof(base)-1] = '\0';
+    char *dot = strrchr(base, '.'); if (dot) *dot = '\0';
 
-    export_sf2(base, inst_list, inst_count);
+    char dir[MAX_PATH] = {0};
+    char *sep = strrchr(base, '\\'); if (!sep) sep = strrchr(base, '/');
+    if (sep) {
+        size_t dlen = (size_t)(sep - base + 1);
+        if (dlen >= sizeof(dir)) dlen = sizeof(dir)-1;
+        memcpy(dir, base, dlen);
+        dir[dlen] = '\0';
+    }
+
+    const char *title_src = NULL;
+    if (selected_bgm >= 0 && selected_bgm < NUM_SONGS && bgm_title[selected_bgm] && bgm_title[selected_bgm][0])
+        title_src = bgm_title[selected_bgm];
+    else title_src = "song";
+
+    char title_sanit[128];
+    size_t ti = 0;
+    for (size_t k = 0; title_src[k] && ti + 1 < sizeof(title_sanit); k++) {
+        unsigned char ch = (unsigned char)title_src[k];
+        if (isspace(ch) || ch == '-') title_sanit[ti++] = '_';
+        else if (isalnum(ch) || ch == '_') title_sanit[ti++] = (char)ch;
+        else title_sanit[ti++] = '_';
+    }
+    title_sanit[ti] = '\0';
+
+    char sf2base[MAX_PATH];
+    if (dir[0]) snprintf(sf2base, sizeof(sf2base), "%s%s", dir, title_sanit);
+    else snprintf(sf2base, sizeof(sf2base), "%s", title_sanit);
+
+    export_sf2(sf2base, inst_list, inst_count);
 
     free(events);
 
